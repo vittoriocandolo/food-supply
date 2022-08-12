@@ -41,12 +41,12 @@ L'organizzazione è responsabile dei dati raccolti nei paesi membri delle nazion
 foodBoT <- read_csv("./data/FoodBalanceSheets_E_All_Data.csv")
 foodBoT <- foodBoT %>%
   # selecting only the columns we need
-  select(Area, Item, Element, Y2019) %>%
+  select(Area, Item, Element, Y2017, Y2018, Y2019) %>%
   # filtering export and import
   filter(Element == "Export Quantity" | Element == "Import Quantity") %>%
   # grouping so that we get can get one entry per state after using pivot_wider
   group_by(Area, Element) %>%
-  summarize(Quantity = sum(Y2019, na.rm=TRUE))
+  summarize(Quantity = sum(Y2017, Y2018, Y2019, na.rm=TRUE)/3)
 foodBoT <- pivot_wider(foodBoT, names_from = Element, values_from = Quantity) %>%
   mutate(`Balance of Trade` = `Export Quantity` - `Import Quantity`) %>%
   select(Area, `Balance of Trade`)
@@ -73,10 +73,12 @@ foodBoTClean[foodBoTClean == "Bahamas"] <- "The Bahamas"
 foodBoTClean[foodBoTClean == "Bolivia (Plurinational State of)"] <- "Bolivia"
 foodBoTClean[foodBoTClean == "China, Hong Kong SAR"] <- "Hong Kong S.A.R."
 foodBoTClean[foodBoTClean == "China, Macao SAR"] <- "Macao S.A.R"
+# removing aggregate entry for China
+foodBoTClean = foodBoTClean[-39,]
 foodBoTClean[foodBoTClean == "China, mainland"] <- "China"
 foodBoTClean[foodBoTClean == "China, Taiwan Province of"] <- "Taiwan"
 foodBoTClean[foodBoTClean == "Cabo Verde"] <- "Cape Verde"
-foodBoTClean[foodBoTClean == "Congo"] <- "Democratic Republic of the Congo"
+foodBoTClean[foodBoTClean == "Congo"] <- "Republic of Congo"
 foodBoTClean[foodBoTClean == "Cote d'Ivoire"] <- "Ivory Coast"
 foodBoTClean[foodBoTClean == "Czechia"] <- "Czech Republic"
 foodBoTClean[foodBoTClean == "Democratic People's Republic of Korea"] <- "North Korea"
@@ -85,12 +87,14 @@ foodBoTClean[foodBoTClean == "Guinea-Bissau"] <- "Guinea Bissau"
 foodBoTClean[foodBoTClean == "Iran (Islamic Republic of)"] <- "Iran"
 foodBoTClean[foodBoTClean == "Lao People's Democratic Republic"] <- "Laos"
 foodBoTClean[foodBoTClean == "Micronesia"] <- "Federated States of Micronesia"
-foodBoTClean[foodBoTClean == "Netherlands Antilles (former)"] <- "Curaçao"
+foodBoTClean[foodBoTClean == "Netherlands Antilles (former)"] <- "Curaçao" # 0
 foodBoTClean[foodBoTClean == "North Macedonia"] <- "Macedonia"
 foodBoTClean[foodBoTClean == "Republic of Korea"] <- "South Korea"
 foodBoTClean[foodBoTClean == "Republic of Moldova"] <- "Moldova"
 foodBoTClean[foodBoTClean == "Russian Federation"] <- "Russia"
 foodBoTClean[foodBoTClean == "Serbia"] <- "Republic of Serbia"
+# removing entry with no data for former Sudan
+foodBoTClean = foodBoTClean[-185,]
 foodBoTClean[foodBoTClean == "Syrian Arab Republic"] <- "Syria"
 foodBoTClean[foodBoTClean == "Timor-Leste"] <- "East Timor"
 foodBoTClean[foodBoTClean == "United Kingdom of Great Britain and Northern Ireland"] <- "United Kingdom"
@@ -104,8 +108,13 @@ borders <- left_join(borders, foodBoTClean, by = c("ADMIN" = "Country"))
 pal <- colorBin("viridis", borders$`BoTNorm`)
 
 # making labels
-labels <- sprintf("<strong>%s</strong><br/>%g thousand tonnes", borders$ADMIN, borders$`Balance of Trade`) %>%
-  lapply(htmltools::HTML)
+labels <- sprintf("<strong>%s</strong><br/>%g K MT", borders$ADMIN, borders$`Balance of Trade`) %>%
+  lapply(htmltools::HTML) # TODO main export/import and associated partners
+
+# entries for custom legend
+legendLabels <- tibble(
+  "- 300,000", "- 240,000", "- 180,000", "- 120,000", "- 60,000", "0",  "+ 75,000", "+ 150,000", "+ 225,000", "+ 300,000"
+  )
 
 # building the map
 map <- leaflet(borders , options = leafletOptions(minZoom = 2), width = "100%") %>%
@@ -116,11 +125,15 @@ map <- leaflet(borders , options = leafletOptions(minZoom = 2), width = "100%") 
     color = '#ffffff', 
     weight = 1, 
     opacity = 0.5, 
-    fillColor = ~pal(`BoTNorm`), 
+    fillColor = ~pal(BoTNorm), 
     fillOpacity = 0.7, 
     highlight = highlightOptions(weight = 5), 
     label = labels
-    )
+    ) %>%
+  addLegend("bottomright", pal = pal, values = ~BoTNorm, title = "BoT (K MT)", opacity = 1, labFormat = 
+              function(type, cuts, p) {paste0(legendLabels)}
+  )
+
 ```
 
 ## La mappa mondiale del BoT

@@ -10,7 +10,7 @@ The second part of the presentation is dedicated to food production and deals wi
 
 ## Structure
 * [data](https://github.com/vittoriocandolo/food-supply/tree/main/data) - contains all the data used, from [FAOSTAT](https://www.fao.org/faostat/en/#data) and [Natural Earth](https://www.naturalearthdata.com/) via [DATA HUB](https://datahub.io/core/geo-countries)
-* [media](https://github.com/vittoriocandolo/food-supply/tree/main/media) - contains all the multimedia used for the presentation
+* [media](https://github.com/vittoriocandolo/food-supply/tree/main/media) - contains all the media used for the presentation
 * [analysis.Rmd](https://github.com/vittoriocandolo/food-supply/blob/main/analysis.Rmd) - data analysis
 * [analysis.html](https://github.com/vittoriocandolo/food-supply/blob/main/analysis.html) - presentation
 * [style.css](https://github.com/vittoriocandolo/food-supply/blob/main/style.css) - minimal css, just for sliders
