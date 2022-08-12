@@ -1,0 +1,11 @@
+tibble
+readr
+tidyr
+dplyr
+knitr
+geojsonsf
+sf
+leaflet
+mapview
+viridisLite
+viridis
