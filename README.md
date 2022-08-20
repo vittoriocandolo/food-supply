@@ -9,7 +9,7 @@ Initially some general considerations are made and then some relevant cases are 
 The second part of the presentation is dedicated to food production and deals with the related issues of sustainability and climate change.
 
 ## Structure
-* [data](https://github.com/vittoriocandolo/food-supply/tree/main/data) - contains all the data used, from [FAOSTAT](https://www.fao.org/faostat/en/#data) and [Natural Earth](https://www.naturalearthdata.com/) via [DATA HUB](https://datahub.io/core/geo-countries)
+* [data](https://github.com/vittoriocandolo/food-supply/tree/main/data) - contains all the data used, from [FAOSTAT](https://www.fao.org/faostat/en/#data), [Natural Earth](https://www.naturalearthdata.com/) via [DATA HUB](https://datahub.io/core/geo-countries), [World Bank](https://www.worldbank.org) and [lukes github](https://github.com/lukes/ISO-3166-Countries-with-Regional-Codes)
 * [media](https://github.com/vittoriocandolo/food-supply/tree/main/media) - contains all the media used for the presentation
 * [analysis.Rmd](https://github.com/vittoriocandolo/food-supply/blob/main/analysis.Rmd) - data analysis
 * [analysis.html](https://github.com/vittoriocandolo/food-supply/blob/main/analysis.html) - presentation

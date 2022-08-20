@@ -5,7 +5,11 @@ dplyr
 knitr
 geojsonsf
 sf
+scales
 leaflet
 mapview
 viridisLite
 viridis
+kableExtra
+ggplot2
+plotly

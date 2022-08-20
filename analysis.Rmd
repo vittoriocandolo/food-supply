@@ -8,11 +8,17 @@ output:
     widescreen: yes
 ---
 
+<style type="text/css">
+slides > slide:not(.nobackground):after {
+  content: '';
+}
+</style>
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(cache = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, cache = TRUE)
 ```
 
-```{r libraries, include=FALSE, message=FALSE, warning=FALSE}
+```{r libraries, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 library(tibble)
 library(readr)
 library(tidyr)
@@ -20,23 +26,27 @@ library(dplyr)
 library(knitr)
 library(geojsonsf)
 library(sf)
+library(scales)
 library(leaflet)
 library(mapview)
 library(viridis)
+library(kableExtra)
+library(plotly)
+library(ggplot2)
 ```
 
 # Data
 
 ## FAOSTAT
 
-Tutti i dataset di partenza sono stati ottenuti dal sito della [FAO](https://www.fao.org/faostat/en/#data), un'organizzazione ONU che si occupa di cibo e agricoltura.
+I dataset di partenza sono stati ottenuti dal sito della [FAO](https://www.fao.org/faostat/en/#data), organizzazione ONU che si occupa di cibo e agricoltura.
 
-L'organizzazione è responsabile dei dati raccolti nei paesi membri delle nazioni unite e si occupa anche della loro validazione e diffusione.
+L'organizzazione è responsabile dei dati raccolti nei paesi membri e si occupa anche della loro validazione e diffusione.  
 <img src="./media/faostat.png" alt="FAOSTAT data web page" width="420" style="margin: 25px"/>
 
 # Balance of Trade
 
-```{r BoTMap, echo=FALSE}
+```{r BoT, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 # building a df for the map
 foodBoT <- read_csv("./data/FoodBalanceSheets_E_All_Data.csv")
 foodBoT <- foodBoT %>%
@@ -45,17 +55,23 @@ foodBoT <- foodBoT %>%
   # filtering export and import
   filter(Element == "Export Quantity" | Element == "Import Quantity") %>%
   # grouping so that we get can get one entry per state after using pivot_wider
+  # we use 3-year average like FAO
   group_by(Area, Element) %>%
   summarize(Quantity = sum(Y2017, Y2018, Y2019, na.rm=TRUE)/3)
 foodBoT <- pivot_wider(foodBoT, names_from = Element, values_from = Quantity) %>%
   mutate(`Balance of Trade` = `Export Quantity` - `Import Quantity`) %>%
   select(Area, `Balance of Trade`)
+foodBoT <- ungroup(foodBoT)
 
 # normalization
 minBoT <- min(foodBoT$`Balance of Trade`)
 maxBoT <- max(foodBoT$`Balance of Trade`)
 foodBoT <- mutate(foodBoT, `BoTNorm` =
                     (`Balance of Trade` - minBoT) / (maxBoT - minBoT))
+
+# rounding the to be displayed column
+
+foodBoT <- mutate_at(foodBoT, vars(`Balance of Trade`), funs(round(., 0)))
 
 # importing geographic data
 borders <- geojson_sf("./data/countries.geojson")
@@ -108,8 +124,9 @@ borders <- left_join(borders, foodBoTClean, by = c("ADMIN" = "Country"))
 pal <- colorBin("viridis", borders$`BoTNorm`)
 
 # making labels
-labels <- sprintf("<strong>%s</strong><br/>%g K MT", borders$ADMIN, borders$`Balance of Trade`) %>%
-  lapply(htmltools::HTML) # TODO main export/import and associated partners
+labels <- sprintf("<strong>%s</strong><br/>%s K MT", borders$ADMIN,
+                  format(round(as.numeric(borders$`Balance of Trade`), 1), nsmall=1, big.mark=",")) %>%
+  lapply(htmltools::HTML)
 
 # entries for custom legend
 legendLabels <- tibble(
@@ -117,7 +134,7 @@ legendLabels <- tibble(
   )
 
 # building the map
-map <- leaflet(borders , options = leafletOptions(minZoom = 2), width = "100%") %>%
+mapBoT <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = "100%") %>%
   addTiles() %>%
   setView(15, 20, 2) %>%
   addPolygons(
@@ -136,8 +153,450 @@ map <- leaflet(borders , options = leafletOptions(minZoom = 2), width = "100%") 
 
 ```
 
+## Bilance commerciali
+
+Come punto di ingresso dell'analisi sfrutteremo un dataset relativo al Balance of Trade (BoT) degli stati.  
+Il BoT è dato dalla differenza tra il totale delle esportazioni e il totale delle importazioni.
+
+Il dataset di partenza è stato elaborato in modo da poter costruire una mappa interattiva che permette di riconoscere il ruolo degli stati nell'offerta globale del cibo.
+
+I dati di riferimento su esportazioni e importazioni sono calcolati come media triennale.  
+È stata attuata una normalizzazione min-max sui dati per ottimizzarne la rappresentazione.
+
+
 ## La mappa mondiale del BoT
 
-```{r echo=FALSE}
-map 
+```{r mapBoT, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+mapBoT 
+```
+
+## Alcune considerazioni
+
+* In Europa Occidentale solo la Francia è esportatore netto
+* Gli stati dell'Europa Orientale sono generalmente esportatori
+* __I due paesi più popolosi (Cina e India) presentano situazioni diverse__
+* Tutti i paesi mediorientali sono importatori netti
+* __Molti stati africani hanno bilanci prossimi alla neutralità__
+* Tutti i paesi dell'Oceania sono esportatori netti
+* __Gli Stati Uniti esportano più del Canada__
+* __I paesi sudamericani sono generalmente esportatori__
+
+# Supply Utilization Accounts
+
+```{r SUA, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# building a df to analyze food production and consumption in China and India
+foodSUA <- read_csv("./data/SUA_Crops_Livestock_E_Asia.csv") %>%
+  # selecting only the columns we need
+  select(Area, Item, Element, Unit, Y2017, Y2018, Y2019) %>%
+  # 3-year average
+  group_by(Area, Item, Element, Unit) %>%
+  summarize(Quantity = sum(Y2017, Y2018, Y2019, na.rm=TRUE)/3)
+
+# filtering China
+foodSUAChina <- filter(foodSUA, Area == "China, Hong Kong SAR" | Area == "China, Macao SAR" | Area == "China, mainland" | Area == "China, Taiwan Province of")
+# aggregating data
+foodSUAChina <- group_by(foodSUAChina, Item, Element, Unit) %>%
+  summarize(Area = "China", Quantity = sum(Quantity))
+foodSUAChina <- ungroup(foodSUAChina) %>%
+  select(-Area)
+
+# filtering India
+foodSUAIndia <- filter(foodSUA, Area == "India")
+foodSUAIndia <- ungroup(foodSUAIndia) %>%
+  select(-Area)
+
+# production output for China
+foodSUAChinaProd <- filter(foodSUAChina, Element == "Production") %>%
+  select(Item, Quantity) %>%
+  arrange(desc(Quantity))
+# preparing for join
+foodSUAChinaProd <- rename(foodSUAChinaProd, `Chinese Production (tonnes)` = Quantity)
+  
+# production output for India
+foodSUAIndiaProd <- filter(foodSUAIndia, Element == "Production") %>%
+  select(Item, Quantity) %>%
+  arrange(desc(Quantity))
+foodSUAIndiaProd <- rename(foodSUAIndiaProd, `Indian Production (tonnes)` = Quantity)
+ 
+# join
+foodSUAProd <- inner_join(foodSUAChinaProd, foodSUAIndiaProd)
+
+# excluding aggregate and redundant entries
+foodSUAProd <- filter(foodSUAProd,!(grepl('Total', Item))) %>%
+  filter(!(grepl('Primary', Item))) %>%
+  filter(!(grepl('Incl', Item))) %>%
+  filter(!(grepl(',', Item)))
+
+# computing totals
+cPTot = sum(foodSUAProd$`Chinese Production (tonnes)`)
+iPTot = sum(foodSUAProd$`Indian Production (tonnes)`)
+
+# building interactive bar-plot
+# margins
+m <- list(
+  l = 50,
+  r = 50,
+  b = 100,
+  t = 100,
+  pad = 4
+)
+# China trace
+plotSUAP <- plot_ly(foodSUAProd, x = ~Item, y = ~`Chinese Production (tonnes)`, type = 'bar', name = 'China', marker = list(color = 'rgb(102,51,153)'))
+# India trace
+plotSUAP <- plotSUAP %>%
+  add_trace(y = ~`Indian Production (tonnes)`, name = 'India', marker = list(color = 'rgb(102,204,153)'))
+# layout
+plotSUAP <- plotSUAP %>%
+  layout(xaxis = list(title = 'Item', showticklabels=FALSE),
+         yaxis = list(title = 'Tonnes'), # , type='log'
+         autosize = F, 
+         width = 1000, 
+         height = 500, 
+         margin = m,
+         barmode = 'group',
+         hovermode='x')
+
+# consumption for China
+foodSUAChinaCons <- filter(foodSUAChina, 
+                           Element == "Export Quantity" | 
+                             Element == "Feed" | 
+                             Element == "Processed" | 
+                             Element == "Loss" | 
+                             Element == "Food supply quantity (tonnes)" |
+                             Element == "Other uses (non-food)") %>%
+  select(-Unit)
+
+foodSUAChinaCons <- pivot_wider(foodSUAChinaCons, names_from = Element, values_from = Quantity) %>%
+  rename(`Export Quantity (tonnes)` = `Export Quantity`, `Feed (tonnes)` = Feed, `Processed (tonnes)` = Processed, `Loss (tonnes)` = Loss, `Other uses (non-food) (tonnes)` = `Other uses (non-food)`)
+
+# excluding aggregate and redundant entries
+foodSUAChinaCons <- filter(foodSUAChinaCons,!(grepl('Total', Item))) %>%
+  filter(!(grepl('Primary', Item))) %>%
+  filter(!(grepl('Incl', Item))) %>%
+  filter(!(grepl(',', Item))) %>%
+  # making an aggregate column for total consumption
+  group_by(Item, `Export Quantity (tonnes)`) %>%
+  summarize(`Consumption Quantity (tonnes)` = sum(`Feed (tonnes)`, `Processed (tonnes)`, `Loss (tonnes)`, `Food supply quantity (tonnes)`, `Other uses (non-food) (tonnes)`, na.rm=TRUE), across())
+  
+  
+# consumption for India
+foodSUAIndiaCons <- filter(foodSUAIndia, 
+                           Element == "Export Quantity" | 
+                             Element == "Feed" | 
+                             Element == "Processed" | 
+                             Element == "Loss" | 
+                             Element == "Food supply quantity (tonnes)" |
+                             Element == "Other uses (non-food)") %>%
+  select(-Unit)
+
+foodSUAIndiaCons <- pivot_wider(foodSUAIndiaCons, names_from = Element, values_from = Quantity) %>%
+  rename(`Export Quantity (tonnes)` = `Export Quantity`, `Feed (tonnes)` = Feed, `Processed (tonnes)` = Processed, `Loss (tonnes)` = Loss, `Other uses (non-food) (tonnes)` = `Other uses (non-food)`)
+ 
+# excluding aggregate and redundant entries
+foodSUAIndiaCons <- filter(foodSUAIndiaCons,!(grepl('Total', Item))) %>%
+  filter(!(grepl('Primary', Item))) %>%
+  filter(!(grepl('Incl', Item))) %>%
+  filter(!(grepl(',', Item))) %>%
+  # making an aggregate column for total consumption
+  group_by(Item, `Export Quantity (tonnes)`) %>%
+  summarize(`Consumption Quantity (tonnes)` = sum(`Feed (tonnes)`, `Processed (tonnes)`, `Loss (tonnes)`, `Food supply quantity (tonnes)`, `Other uses (non-food) (tonnes)`, na.rm=TRUE), across())
+
+# computing totals
+cCTot = sum(foodSUAChinaCons$`Consumption Quantity (tonnes)`, na.rm = TRUE)
+iCTot = sum(foodSUAIndiaCons$`Consumption Quantity (tonnes)`, na.rm = TRUE)
+
+# China consumption plot
+plotChinaCons <- plot_ly(
+  foodSUAChinaCons,
+  x = ~`Export Quantity (tonnes)`,
+  y = ~`Consumption Quantity (tonnes)`,
+  size = ~`Food supply quantity (tonnes)`,
+  color = ~Item,
+  colors = c("#440154", "#46327e", "#365c8d", "#277f8e", "#1fa187", "#4ac16d", "#a0da39", "#fde725"),
+  hovermode = "x",
+  type = 'scatter',
+  mode = 'markers'
+  )
+
+plotChinaCons <- plotChinaCons %>%
+  layout(
+    showlegend = FALSE,
+    xaxis = list(title = 'Consumption'),
+    yaxis = list(title = 'Export')
+    )
+
+# India consumption plot
+plotIndiaCons <- plot_ly(
+  foodSUAIndiaCons,
+  x = ~`Export Quantity (tonnes)`,
+  y = ~`Consumption Quantity (tonnes)`,
+  size = ~`Food supply quantity (tonnes)`,
+  color = ~Item,
+  colors = c("#440154", "#46327e", "#365c8d", "#277f8e", "#1fa187", "#4ac16d", "#a0da39", "#fde725"),
+  hovermode = "x",
+  type = 'scatter',
+  mode = 'markers'
+  )
+
+plotIndiaCons <- plotIndiaCons %>%
+  layout(
+    showlegend = FALSE,
+    xaxis = list(title = 'Consumption'),
+    yaxis = list(title = 'Export')
+    )
+```
+
+## Cina e India a confronto
+
+Si tratta di due stati grandi e molto popolosi.  
+La Cina è il più grande importatore di cibo al mondo, l'India ha invece una bilancia commerciale positiva.
+
+Per capire le ragioni di questa differenza analizzeremo la produzione e il consumo di cibo nei due paesi.
+
+Ci serviremo di un dataset diverso, incentrato sulla contabilità alimentare degli stati (Supply Utilization Accounts).
+
+## Produzione
+
+Per prima cosa verifichiamo che a causare le grandi importazioni cinesi non sia una produzione alimentare inadeguata al sostentamento della sua popolazione  
+(che è solo sensibilmente maggiore rispetto a quella indiana).
+
+Il seguente grafico confronta l'output produttivo dei due paesi per ogni categoria di alimento.
+
+```{r plotSUAP, include= TRUE, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+plotSUAP
+```
+
+## Produzione
+
+Come emerge navigando il grafico, nonostante alcuni settori in cui l'India è specializzata, la produzione di cibo in Cina è globalmente superiore.
+
+```{r}
+options(scipen=999)
+foodSUAProd <- rbind(list("Total", cPTot, iPTot), foodSUAProd)
+foodSUAProd %>%
+  arrange(desc(`Chinese Production (tonnes)`)) %>%
+  mutate_at(vars(`Chinese Production (tonnes)`, `Indian Production (tonnes)`), funs(format(round(as.numeric(., 0), 1), nsmall=1, big.mark=","))) %>%
+  kable() %>%
+  kable_minimal(c("striped", "hover", "condensed", "responsive"), font_size = 15) %>%
+  scroll_box(width = "100%", height = "500px")
+```
+
+## Consumi
+
+Chiarito che non è l'output produttivo a determinare la condizione cinese non ci resta che esplorare l'aspetto dei consumi.
+
+Sfrutteremo un'opportuna rielaborazione del dataset usato in precedenza.
+
+China:
+
+Total consumption: 
+
+```{r}
+options(scipen=999)
+format(round(as.numeric(cCTot), 1), nsmall=1, big.mark=",")
+```
+
+```{r include= TRUE, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+options(scipen=999)
+
+foodSUAChinaCons %>%
+  mutate_if(is.numeric, funs(format(round(as.numeric(., 0), 1), nsmall=1, big.mark=","))) %>%
+  kable() %>%
+  kable_minimal(c("striped", "hover", "condensed", "responsive"), font_size = 15) %>%
+  scroll_box(width = "100%", height = "500px")
+```
+
+<br>
+India:
+
+Total consumption: 
+
+```{r}
+options(scipen=999)
+format(round(as.numeric(iCTot), 1), nsmall=1, big.mark=",")
+```
+
+```{r include= TRUE, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+options(scipen=999)
+
+foodSUAIndiaCons %>%
+  mutate_if(is.numeric, funs(format(round(as.numeric(., 0), 1), nsmall=1, big.mark=","))) %>%
+  kable() %>%
+  kable_minimal(c("striped", "hover", "condensed", "responsive"), font_size = 15) %>%
+  scroll_box(width = "100%", height = "500px")
+```
+
+## Consumi
+
+Nei grafici successivi andremo a vedere la relazione tra export e consumi per ogni alimento.
+
+La dimensione del punto dipende dal consumo umano dell'alimento.
+
+China:
+
+```{r}
+plotChinaCons
+```
+
+<br>
+India:
+
+```{r}
+plotIndiaCons
+```
+
+<br>
+Possiamo quindi concludere che la differenza evidenziata dalla mappa è da ricondurre in primo luogo ad un maggiore consumo interno della produzione in Cina e in secondo luogo ad una propensione alla quasi totale esportazione di alcune produzioni in India.
+
+# Population and GDP
+
+## L'Africa subsahariana
+
+Il bilancio commerciale è a livello globale ovviamente un gioco a somma zero.
+
+Anche a livello continetale però questa caratteristica generalmente si mantiene per motivi commerciali, geografici, politici e culturali.
+
+Un'importante eccezione si verifica però in Africa:
+
+```{r}
+# building a df for the map
+foodBoTA <- read_csv("./data/FoodBalanceSheets_E_Africa.csv")
+foodBoTA <- foodBoTA %>%
+  # selecting only the columns we need
+  select(Area, Item, Element, Y2017, Y2018, Y2019) %>%
+  # filtering export and import
+  filter(Element == "Export Quantity" | Element == "Import Quantity") %>%
+  # grouping so that we get can get one entry per state after using pivot_wider
+  # we use 3-year average like FAO
+  group_by(Area, Element) %>%
+  summarize(Quantity = sum(Y2017, Y2018, Y2019, na.rm=TRUE)/3)
+foodBoTA <- pivot_wider(foodBoTA, names_from = Element, values_from = Quantity) %>%
+  mutate(`Balance of Trade` = `Export Quantity` - `Import Quantity`) %>%
+  select(Area, `Balance of Trade`)
+foodBoTA <- ungroup(foodBoTA)
+
+# rounding
+foodBoTA <- mutate_at(foodBoTA, vars(`Balance of Trade`), funs(round(., 0)))
+
+iso <- read_csv("./data/lukes_ISO-3166-Countries-with-Regional-Codes.csv") %>%
+  rename(Area = name)
+
+foodBoTMacro <- inner_join(iso, foodBoTA)
+foodBoTMacro <- select(foodBoTMacro, Area, region, `sub-region`, `intermediate-region`, `Balance of Trade`) %>%
+  rename(`Sub-region` = `sub-region`)
+
+regionBoTBarPlot <- ggplot(data = foodBoTMacro) +
+  geom_boxplot(mapping = aes(x = `intermediate-region`, y = `Balance of Trade`,  fill = `Sub-region`)) +
+  xlab("Intermediate-region")
+
+wgdp <- read_csv("./data/API_NY.GDP.MKTP.CD_DS2_en_csv_v2_4413598.csv") %>%
+  select(`Country Name`, `Country Code`, `2018`) %>%
+  rename(Country = `Country Name`, `GDP$ 2018` = `2018`) %>%
+  filter(!(grepl('AFE', `Country Code`))) %>%
+  filter(!(grepl('AFW', `Country Code`))) %>%
+  filter(!(grepl('ARB', `Country Code`))) %>%
+  filter(!(grepl('CEB', `Country Code`))) %>%
+  filter(!(grepl('EAP', `Country Code`))) %>%
+  filter(!(grepl('EAR', `Country Code`))) %>%
+  filter(!(grepl('EAS', `Country Code`))) %>%
+  filter(!(grepl('ECA', `Country Code`))) %>%
+  filter(!(grepl('ECS', `Country Code`))) %>%
+  filter(!(grepl('EMU', `Country Code`))) %>%
+  filter(!(grepl('EUU', `Country Code`))) %>%
+  filter(!(grepl('FCS', `Country Code`))) %>%
+  filter(!(grepl('HIC', `Country Code`))) %>%
+  filter(!(grepl('HPC', `Country Code`))) %>%
+  filter(!(grepl('IBD', `Country Code`))) %>%
+  filter(!(grepl('IBT', `Country Code`))) %>%
+  filter(!(grepl('IDA', `Country Code`))) %>%
+  filter(!(grepl('IDB', `Country Code`))) %>%
+  filter(!(grepl('AFE', `Country Code`))) %>%
+  filter(!(grepl('IDX', `Country Code`))) %>%
+  filter(!(grepl('LAC', `Country Code`))) %>%
+  filter(!(grepl('LCN', `Country Code`))) %>%
+  filter(!(grepl('LDC', `Country Code`))) %>%
+  filter(!(grepl('LIC', `Country Code`))) %>%
+  filter(!(grepl('LMC', `Country Code`))) %>%
+  filter(!(grepl('LMY', `Country Code`))) %>%
+  filter(!(grepl('LTE', `Country Code`))) %>%
+  filter(!(grepl('MEA', `Country Code`))) %>%
+  filter(!(grepl('MIC', `Country Code`))) %>%
+  filter(!(grepl('MNA', `Country Code`))) %>%
+  filter(!(grepl('NAC', `Country Code`))) %>%
+  filter(!(grepl('OED', `Country Code`))) %>%
+  filter(!(grepl('OSS', `Country Code`))) %>%
+  filter(!(grepl('PRE', `Country Code`))) %>%
+  filter(!(grepl('PST', `Country Code`))) %>%
+  filter(!(grepl('SAS', `Country Code`))) %>%
+  filter(!(grepl('SSA', `Country Code`))) %>%
+  filter(!(grepl('SSF', `Country Code`))) %>%
+  filter(!(grepl('SST', `Country Code`))) %>%
+  filter(!(grepl('TEA', `Country Code`))) %>%
+  filter(!(grepl('TEC', `Country Code`))) %>%
+  filter(!(grepl('TLA', `Country Code`))) %>%
+  filter(!(grepl('TMN', `Country Code`))) %>%
+  filter(!(grepl('TSA', `Country Code`))) %>%
+  filter(!(grepl('TSS', `Country Code`))) %>%
+  filter(!(grepl('UMC', `Country Code`))) %>%
+  filter(!(grepl('WLD', `Country Code`)))
+
+wpop <- read_csv("./data/Population_E_All_Data.csv") %>%
+  select(`Area Code (ISO3)`, `Value`) %>%
+  filter(!(grepl('F41', `Area Code (ISO3)`))) %>%
+  rename(`Country Code` = `Area Code (ISO3)`, `Population 1000x` = Value)
+
+popGdp <- inner_join(wpop, wgdp)
+
+correlation <- inner_join(foodBoTClean, popGdp) %>%
+  select(-BoTNorm, -`Country Code`)
+
+popBoTScatter <- ggplot(data = correlation, mapping = aes(x = `Population 1000x`, y = `Balance of Trade`)) +
+  geom_point() + 
+  geom_smooth()
+
+gdpBoTScatter <- ggplot(data = correlation, mapping = aes(x = `GDP$ 2018`, y = `Balance of Trade`)) +
+  geom_point() + 
+  geom_smooth()
+
+regionBoTBarPlot
+```
+
+## Correlazione
+
+Gli stati del Nord Africa sono certamente favoriti nel commercio tramite il Mediterraneo ma sono anche in media più ricchi e popolosi rispetto agli stati subshariani.
+
+Gli outsider nel grafico precedente sono infatti caratterizzati da una popolazione di molto superiore rispetto a quella dei loro vicini.
+
+Il BoT è un dato complesso e non ci aspettiamo quindi di trovare una correlazione lineare tra esso e la popolazione o il PIL di un paese, visualiziamo ugualmente la relazione per analizzarla.
+
+## BoT - Population
+
+```{r}
+popBoTScatter
+```
+
+## BoT - GDP
+
+```{r}
+gdpBoTScatter
+```
+
+# Production and land
+
+## USA vs Canada
+
+```{r}
+foodProd <- read_csv("./data/Production_Crop_Livestock_E_Americas.csv")
+
+foodProdCanada <- filter(foodProd, Area == "Canada") %>%
+  select(Domain, Element, Item, Unit, Value)
+
+foodProdUSA <- filter(foodProd, Area == "United States of America") %>%
+  select(Domain, Element, Item, Unit, Value)
+
+pop <- read_csv("./data/Population_E_Americas.csv")
+
+cens <- read_csv("./data/Word_Census_Agriculture_E_Americas.csv")
+
 ```
