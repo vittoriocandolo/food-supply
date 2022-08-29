@@ -45,7 +45,7 @@ Riferimenti all'economia potranno però essere talvolta presenti, così come son
 
 L'analisi parte dalla visualizzazione di un dato che ho sfruttato io stesso per orientarmi.  
 In seguito si cercano nei dati risposte a quesiti sorti proprio osservando questo modello iniziale.  
-La parte finale del progetto è dedicata ad alcune considerazioni generali sui temi fortemente collegati di sostenibilità e cambiamento climatico.
+La parte finale del progetto è dedicata ad alcune considerazioni generali sul tema della sostenibilità della produzione.
 
 # Data
 
@@ -87,32 +87,30 @@ boT <- read_csv("./data/FoodBalanceSheets_E_All_Data.csv") %>%
 
 boT <- pivot_wider(boT, names_from = Element, values_from = Quantity) %>%
   # making a derived column for ease
-  mutate(`Balance of Trade (K MT)` = `Export Quantity` - `Import Quantity`) %>%
+  mutate(`bot` = `Export Quantity` - `Import Quantity`) %>%
   # minimal selection
-  select(Area, `Balance of Trade (K MT)`)
+  select(Area, bot) %>%
+  rename(country = Area)
 
 # ungrouping
 boT <- ungroup(boT)
 
 # normalization so that it works better with the palette but without distortion
-minBoT <- min(boT$`Balance of Trade (K MT)`)
-maxBoT <- max(boT$`Balance of Trade (K MT)`)
-boT <- mutate(boT, `BoTNorm` =
-                    (`Balance of Trade (K MT)` - minBoT) / (maxBoT - minBoT))
+minBoT <- min(boT$bot)
+maxBoT <- max(boT$bot)
+boT <- mutate(boT, botNorm =
+                    (bot - minBoT) / (maxBoT - minBoT))
 
 # rounding the to be displayed column
-boT <- mutate_at(boT, vars(`Balance of Trade (K MT)`), funs(round(., 0)))
+boT <- mutate_at(boT, vars(bot), funs(round(., 0)))
 
 # importing geographic data
 borders <- geojson_sf("./data/countries.geojson")
 
-# aligning column names
-boT <- rename(boT, Country = Area)
-
 # fixing country name mismatches
 
 # let's find conflicts
-countriesToFix <- anti_join(boT, borders, by = c("Country" = "ADMIN"))
+countriesToFix <- anti_join(boT, borders, by = c("country" = "ADMIN"))
 
 # fixing
 boT[boT == "Bahamas"] <- "The Bahamas"
@@ -150,16 +148,16 @@ boT = boT[-39,]
 boT = boT[-185,]
 
 # left outer join between our df and the geographic data
-borders <- left_join(borders, boT, by = c("ADMIN" = "Country"))
+borders <- left_join(borders, boT, by = c("ADMIN" = "country"))
 
 # building the map
 
 # setting the palette
-palette <- colorBin("viridis", borders$`BoTNorm`)
+palette <- colorBin("viridis", borders$botNorm)
 
 # making labels
 labels <- sprintf("<strong>%s</strong><br/>%s K MT", borders$ADMIN,
-                  format(round(as.numeric(borders$`Balance of Trade (K MT)`), 1), nsmall=1, big.mark=",")) %>%
+                  format(round(as.numeric(borders$bot), 1), nsmall=1, big.mark=",")) %>%
   lapply(htmltools::HTML)
 
 # entries for custom legend
@@ -176,13 +174,13 @@ mapBoT <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = "10
     color = '#ffffff', 
     weight = 1, 
     opacity = 0.5, 
-    fillColor = ~palette(BoTNorm), 
+    fillColor = ~palette(botNorm), 
     fillOpacity = 0.7, 
     highlight = highlightOptions(weight = 5), 
     label = labels
     ) %>%
     # legend
-    addLegend("bottomright", pal = palette, values = ~BoTNorm, title = "BoT (K MT)", opacity = 1, labFormat = 
+    addLegend("bottomright", pal = palette, values = ~botNorm, title = "BoT (K MT)", opacity = 1, labFormat = 
               function(type, cuts, p) {paste0(legendLabels)}
   )
 ```
@@ -229,66 +227,67 @@ sUA <- read_csv("./data/SUA_Crops_Livestock_E_Asia.csv") %>%
   select(Area, Item, Element, Unit, Y2017, Y2018, Y2019) %>%
   # 3-year average
   group_by(Area, Item, Element, Unit) %>%
-  summarize(Quantity = sum(Y2017, Y2018, Y2019, na.rm=TRUE)/3)
+  summarize(Quantity = sum(Y2017, Y2018, Y2019, na.rm=TRUE)/3) %>%
+  rename(country = Area, item = Item, element = Element, unit = Unit, quantity = Quantity)
 
 # ungrouping
 sUA <- ungroup(sUA)
 
 # filtering China
 sUAChina <- filter(sUA,
-                       Area == "China, Hong Kong SAR" |
-                       Area == "China, Macao SAR" | 
-                       Area == "China, mainland" | 
-                       Area == "China, Taiwan Province of"
+                       country == "China, Hong Kong SAR" |
+                       country == "China, Macao SAR" | 
+                       country == "China, mainland" | 
+                       country == "China, Taiwan Province of"
                        )
                        
 # aggregating data
-sUAChina <- group_by(sUAChina, Item, Element, Unit) %>%
-  summarize(Area = "China", Quantity = sum(Quantity))
+sUAChina <- group_by(sUAChina, item, element, unit) %>%
+  summarize(country = "China", quantity = sum(quantity))
 
 # ungrouping and minimal selection
 sUAChina <- ungroup(sUAChina) %>%
-  select(-Area)
+  select(-country)
 
 # filtering India
-sUAIndia <- filter(sUA, Area == "India")
+sUAIndia <- filter(sUA, country == "India")
 
 # ungrouping and minimal selection
 sUAIndia <- ungroup(sUAIndia) %>%
-  select(-Area)
+  select(-country)
 
 # filtering production output for China
-sUAChinaP <- filter(sUAChina, Element == "Production") %>%
+sUAChinaP <- filter(sUAChina, element == "Production") %>%
   # minimal selection
-  select(Item, Quantity) %>%
+  select(item, quantity) %>%
   # arranging for display
-  arrange(desc(Quantity))
+  arrange(desc(quantity))
 
 # preparing for join
-sUAChinaP <- rename(sUAChinaP, `Chinese Production (tonnes)` = Quantity)
+sUAChinaP <- rename(sUAChinaP, `chineseProduction` = quantity)
   
 # filtering production output for India
-sUAIndiaP <- filter(sUAIndia, Element == "Production") %>%
+sUAIndiaP <- filter(sUAIndia, element == "Production") %>%
   # minimal selection
-  select(Item, Quantity) %>%
+  select(item, quantity) %>%
   # arranging for display
-  arrange(desc(Quantity))
+  arrange(desc(quantity))
 
 # preparing for join
-sUAIndiaP <- rename(sUAIndiaP, `Indian Production (tonnes)` = Quantity)
+sUAIndiaP <- rename(sUAIndiaP, indianProduction = quantity)
  
 # join
 sUAP <- inner_join(sUAChinaP, sUAIndiaP)
 
 # excluding aggregate and redundant entries
-sUAP <- filter(sUAP,!(grepl('Total', Item))) %>%
-  filter(!(grepl('Primary', Item))) %>%
-  filter(!(grepl('Incl', Item))) %>%
-  filter(!(grepl(',', Item)))
+sUAP <- filter(sUAP,!(grepl('Total', item))) %>%
+  filter(!(grepl('Primary', item))) %>%
+  filter(!(grepl('Incl', item))) %>%
+  filter(!(grepl(',', item)))
 
 # computing totals
-cPTot = sum(sUAP$`Chinese Production (tonnes)`)
-iPTot = sum(sUAP$`Indian Production (tonnes)`)
+cPTot = sum(sUAP$chineseProduction)
+iPTot = sum(sUAP$indianProduction)
 
 # building interactive bar-plot
 
@@ -304,8 +303,8 @@ m <- list(
 # China trace
 barSUAP <- plot_ly(
   sUAP,
-  x = ~Item,
-  y = ~`Chinese Production (tonnes)`,
+  x = ~item,
+  y = ~chineseProduction,
   type = 'bar',
   name = 'China',
   marker = list(color = 'rgb(102,51,153)')
@@ -314,7 +313,7 @@ barSUAP <- plot_ly(
 # India trace
 barSUAP <- barSUAP %>%
   add_trace(
-    y = ~`Indian Production (tonnes)`,
+    y = ~indianProduction,
     name = 'India',
     marker = list(color = 'rgb(102,204,153)')
     )
@@ -322,7 +321,7 @@ barSUAP <- barSUAP %>%
 # layout
 barSUAP <- barSUAP %>%
   layout(xaxis = list(title = 'Item', showticklabels=FALSE),
-         yaxis = list(title = 'Tonnes'), # , type='log'
+         yaxis = list(title = 'Tonnes'),
          autosize = F, 
          width = 1000, 
          height = 500, 
@@ -333,98 +332,104 @@ barSUAP <- barSUAP %>%
 # adding totals
 sUAP <- rbind(list("Total", cPTot, iPTot), sUAP) %>%
 # arrangement so that we show totals first
-  arrange(desc(`Chinese Production (tonnes)`)) %>%
+  arrange(desc(chineseProduction)) %>%
   # readable format
   mutate_at(
-    vars(`Chinese Production (tonnes)`, `Indian Production (tonnes)`),
+    vars(chineseProduction, indianProduction),
     funs(format(round(as.numeric(., 0), 1), nsmall=1, big.mark=","))
     )
 
 # filtering consumption for China
 sUAChinaC <- filter(sUAChina,
-                    Element == "Export Quantity" | 
-                    Element == "Feed" | 
-                    Element == "Processed" | 
-                    Element == "Loss" | 
-                    Element == "Food supply quantity (tonnes)" |
-                    Element == "Other uses (non-food)") %>%
+                    element == "Export Quantity" | 
+                    element == "Feed" | 
+                    element == "Processed" | 
+                    element == "Loss" |
+                    element == "Food supply quantity (tonnes)" |
+                    element == "Other uses (non-food)") %>%
   # minimal selection
-  select(-Unit)
+  select(-unit)
 
 # pivot-wider to make it tidy
-sUAChinaC <- pivot_wider(sUAChinaC, names_from = Element, values_from = Quantity) %>%
-  # putting unit information in the title of the columns
-  rename(
-    `Export Quantity (tonnes)` = `Export Quantity`,
-    `Feed (tonnes)` = Feed,
-    `Processed (tonnes)` = Processed,
-    `Loss (tonnes)` = Loss,
-    `Other uses (non-food) (tonnes)` = `Other uses (non-food)`
-    )
+sUAChinaC <- pivot_wider(sUAChinaC, names_from = element, values_from = quantity)
 
 # excluding aggregate and redundant entries
-sUAChinaC <- filter(sUAChinaC,!(grepl('Total', Item))) %>%
-  filter(!(grepl('Primary', Item))) %>%
-  filter(!(grepl('Incl', Item))) %>%
-  filter(!(grepl(',', Item))) %>%
+sUAChinaC <- filter(sUAChinaC,!(grepl('Total', item))) %>%
+  filter(!(grepl('Primary', item))) %>%
+  filter(!(grepl('Incl', item))) %>%
+  filter(!(grepl(',', item))) %>%
   # making an aggregate column for total consumption
-  group_by(Item, `Export Quantity (tonnes)`) %>%
-  summarize(`Consumption Quantity (tonnes)` = sum(
-    `Feed (tonnes)`,
-    `Processed (tonnes)`,
-    `Loss (tonnes)`,
+  group_by(item, `Export Quantity`) %>%
+  summarize(`Consumption Quantity` = sum(
+    `Feed`,
+    `Processed`,
+    `Loss`,
     `Food supply quantity (tonnes)`,
-    `Other uses (non-food) (tonnes)`, na.rm=TRUE), across()) %>%
-  arrange(desc(`Consumption Quantity (tonnes)`))
+    `Other uses (non-food)`, na.rm=TRUE), across()) %>%
+  arrange(desc(`Consumption Quantity`)) %>%
+  rename(
+    exportQuantity = `Export Quantity`,
+    consumptionQuantity = `Consumption Quantity`,
+    otherUsesNonFood = `Other uses (non-food)`,
+    foodSupplyQuantity = `Food supply quantity (tonnes)`,
+    loss = Loss,
+    processed = Processed,
+    feed = Feed)
 
 # ungrouping
 sUAChinaC <- ungroup(sUAChinaC)
   
 # filtering consumption for India
 sUAIndiaC <- filter(sUAIndia, 
-                    Element == "Export Quantity" | 
-                    Element == "Feed" | 
-                    Element == "Processed" | 
-                    Element == "Loss" | 
-                    Element == "Food supply quantity (tonnes)" |
-                    Element == "Other uses (non-food)") %>%
+                    element == "Export Quantity" | 
+                    element == "Feed" | 
+                    element == "Processed" | 
+                    element == "Loss" | 
+                    element == "Food supply quantity (tonnes)" |
+                    element == "Other uses (non-food)") %>%
   # minimal selection
-  select(-Unit)
+  select(-unit)
 
 # pivot-wider to make it tidy
-sUAIndiaC <- pivot_wider(sUAIndiaC, names_from = Element, values_from = Quantity) %>%
-  # putting unit information in the title of the columns
-  rename(`Export Quantity (tonnes)` = `Export Quantity`, `Feed (tonnes)` = Feed, `Processed (tonnes)` = Processed, `Loss (tonnes)` = Loss, `Other uses (non-food) (tonnes)` = `Other uses (non-food)`)
+sUAIndiaC <- pivot_wider(sUAIndiaC, names_from = element, values_from = quantity)
  
 # excluding aggregate and redundant entries
-sUAIndiaC <- filter(sUAIndiaC,!(grepl('Total', Item))) %>%
-  filter(!(grepl('Primary', Item))) %>%
-  filter(!(grepl('Incl', Item))) %>%
-  filter(!(grepl(',', Item))) %>%
+sUAIndiaC <- filter(sUAIndiaC,!(grepl('Total', item))) %>%
+  filter(!(grepl('Primary', item))) %>%
+  filter(!(grepl('Incl', item))) %>%
+  filter(!(grepl(',', item))) %>%
   # making an aggregate column for total consumption
-  group_by(Item, `Export Quantity (tonnes)`) %>%
-  summarize(`Consumption Quantity (tonnes)` = sum(
-    `Feed (tonnes)`,
-    `Processed (tonnes)`,
-    `Loss (tonnes)`,
+  group_by(item, `Export Quantity`) %>%
+  summarize(`Consumption Quantity` = sum(
+    `Feed`,
+    `Processed`,
+    `Loss`,
     `Food supply quantity (tonnes)`,
-    `Other uses (non-food) (tonnes)`, na.rm=TRUE), across()) %>%
-  arrange(desc(`Consumption Quantity (tonnes)`))
+    `Other uses (non-food)`, na.rm=TRUE), across()) %>%
+  arrange(desc(`Consumption Quantity`)) %>%
+  rename(
+    exportQuantity = `Export Quantity`,
+    consumptionQuantity = `Consumption Quantity`,
+    otherUsesNonFood = `Other uses (non-food)`,
+    foodSupplyQuantity = `Food supply quantity (tonnes)`,
+    loss = Loss,
+    processed = Processed,
+    feed = Feed)
 
 # ungrouping
 sUAIndiaC <- ungroup(sUAIndiaC)
 
 # computing totals
-cCTot = sum(sUAChinaC$`Consumption Quantity (tonnes)`, na.rm = TRUE)
-iCTot = sum(sUAIndiaC$`Consumption Quantity (tonnes)`, na.rm = TRUE)
+cCTot = sum(sUAChinaC$consumptionQuantity, na.rm = TRUE)
+iCTot = sum(sUAIndiaC$consumptionQuantity, na.rm = TRUE)
 
 # China consumption plot
 scatterSUAChinaC <- plot_ly(
   sUAChinaC,
-  x = ~`Export Quantity (tonnes)`,
-  y = ~`Consumption Quantity (tonnes)`,
-  size = ~`Food supply quantity (tonnes)`,
-  color = ~Item,
+  x = ~exportQuantity,
+  y = ~consumptionQuantity,
+  size = ~foodSupplyQuantity,
+  color = ~item,
   colors = c("#440154", "#46327e", "#365c8d", "#277f8e", "#1fa187", "#4ac16d", "#a0da39", "#fde725"),
   hovermode = "x",
   type = 'scatter',
@@ -442,10 +447,10 @@ scatterSUAChinaC <- scatterSUAChinaC %>%
 # India consumption plot
 scatterSUAIndiaC <- plot_ly(
   sUAIndiaC,
-  x = ~`Export Quantity (tonnes)`,
-  y = ~`Consumption Quantity (tonnes)`,
-  size = ~`Food supply quantity (tonnes)`,
-  color = ~Item,
+  x = ~exportQuantity,
+  y = ~consumptionQuantity,
+  size = ~foodSupplyQuantity,
+  color = ~item,
   colors = c("#440154", "#46327e", "#365c8d", "#277f8e", "#1fa187", "#4ac16d", "#a0da39", "#fde725"),
   hovermode = "x",
   type = 'scatter',
@@ -487,6 +492,8 @@ barSUAP
 Come emerge navigando il grafico, nonostante alcuni settori in cui l'India è specializzata, la produzione di cibo in Cina è globalmente superiore.  
 La Cina è infatti (come vedremo in seguito) il più grande produttore di cibo al mondo, seguita proprio dall'India.
 
+Le quantità sono espresse in tonnellate.
+
 ```{r sUAP, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
 # disabling scientific notation
@@ -503,11 +510,12 @@ sUAP %>%
 
 Chiarito che non è l'output produttivo a determinare la condizione cinese non ci resta che esplorare l'aspetto dei consumi.
 
-Sfrutteremo un'opportuna rielaborazione del dataset usato in precedenza.
+Sfrutteremo un'opportuna rielaborazione del dataset usato in precedenza.  
+Tutte le quantità seguenti sono in tonnellate.
 
-China:
+Cina:
 
-Total consumption:
+Consumi totali:
 
 ```{r cTot, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -531,7 +539,7 @@ sUAChinaC %>%
 <br>
 India:
 
-Total consumption:
+Consumi totali:
 
 ```{r iCTot, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -560,7 +568,7 @@ Nei grafici successivi andremo a vedere la relazione tra export e consumi per og
 
 La dimensione del punto dipende dal consumo umano dell'alimento.
 
-China:
+Cina:
 
 ```{r scatterSUAChinaC, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -587,7 +595,7 @@ Possiamo quindi concludere che la differenza evidenziata dalla mappa è da ricon
 # importing countries data (ISO3 format)
 iso <- read_csv("./data/lukes_ISO-3166-Countries-with-Regional-Codes.csv") %>%
   # preparing for join
-  rename(Country = name) %>%
+  rename(country = name) %>%
   # filtering only african countries
   filter((grepl('Africa', `region`)))
 
@@ -603,13 +611,11 @@ iso[iso == "Timor-Leste"] <- "East Timor"
 boTA <- inner_join(iso, boT)
 
 # selecting only the columns we need
-boTA <- select(boTA, Country, region, `sub-region`, `intermediate-region`, `Balance of Trade (K MT)`) %>%
-  # preparing for next join
-  rename(`Sub-region` = `sub-region`)
+boTA <- select(boTA, country, region, `sub-region`, `intermediate-region`, bot)
 
 # building bar plot
 boxBoTA <- ggplot(data = boTA) +
-  geom_boxplot(mapping = aes(x = `intermediate-region`, y = `Balance of Trade (K MT)`,  fill = `Sub-region`)) +
+  geom_boxplot(mapping = aes(x = `intermediate-region`, y = bot,  fill = `sub-region`)) +
   labs(
     title = "BoT Africa per regione",
     subtitle = "Intermediate-region =  NA per gli stati della Northern Africa",
@@ -622,69 +628,69 @@ wHa <- read_csv("./data/Inputs_LandUse_E_All_Data.csv") %>%
   # selection only the columns we need
   select(`Area Code (ISO3)`, `Value`) %>%
   # preparing for join and renaming with unit in column title
-  rename(`Country Code` = `Area Code (ISO3)`, `Area (1000 ha)` = Value)
+  rename(cCode = `Area Code (ISO3)`, area = Value)
 
 # importing population data from a new dataset (we need ISO3 names)
 wpop <- read_csv("./data/Population_E_All_Data.csv") %>%
   # selection only the columns we need
   select(`Area Code (ISO3)`, `Value`) %>%
   # preparing for join and renaming with unit in column title
-  rename(`Country Code` = `Area Code (ISO3)`, `Population 1000x` = Value)
+  rename(cCode = `Area Code (ISO3)`, population = Value)
 
 # importing dataset with GDP data
 wgdp <- read_csv("./data/API_NY.GDP.MKTP.CD_DS2_en_csv_v2_4413598.csv") %>%
   # selecting only the columns we need, 2018 is last year with every state in FAO data
   select(`Country Name`, `Country Code`, `2018`) %>%
   # preparing for next join and renaming
-  rename(Country = `Country Name`, `GDP$ 2018` = `2018`) %>%
+  rename(country = `Country Name`, cCode = `Country Code`, gdp = `2018`) %>%
   # removing aggregate country codes...
-  filter(!(grepl('AFE', `Country Code`))) %>%
-  filter(!(grepl('AFW', `Country Code`))) %>%
-  filter(!(grepl('ARB', `Country Code`))) %>%
-  filter(!(grepl('CEB', `Country Code`))) %>%
-  filter(!(grepl('EAP', `Country Code`))) %>%
-  filter(!(grepl('EAR', `Country Code`))) %>%
-  filter(!(grepl('EAS', `Country Code`))) %>%
-  filter(!(grepl('ECA', `Country Code`))) %>%
-  filter(!(grepl('ECS', `Country Code`))) %>%
-  filter(!(grepl('EMU', `Country Code`))) %>%
-  filter(!(grepl('EUU', `Country Code`))) %>%
-  filter(!(grepl('FCS', `Country Code`))) %>%
-  filter(!(grepl('HIC', `Country Code`))) %>%
-  filter(!(grepl('HPC', `Country Code`))) %>%
-  filter(!(grepl('IBD', `Country Code`))) %>%
-  filter(!(grepl('IBT', `Country Code`))) %>%
-  filter(!(grepl('IDA', `Country Code`))) %>%
-  filter(!(grepl('IDB', `Country Code`))) %>%
-  filter(!(grepl('AFE', `Country Code`))) %>%
-  filter(!(grepl('IDX', `Country Code`))) %>%
-  filter(!(grepl('LAC', `Country Code`))) %>%
-  filter(!(grepl('LCN', `Country Code`))) %>%
-  filter(!(grepl('LDC', `Country Code`))) %>%
-  filter(!(grepl('LIC', `Country Code`))) %>%
-  filter(!(grepl('LMC', `Country Code`))) %>%
-  filter(!(grepl('LMY', `Country Code`))) %>%
-  filter(!(grepl('LTE', `Country Code`))) %>%
-  filter(!(grepl('MEA', `Country Code`))) %>%
-  filter(!(grepl('MIC', `Country Code`))) %>%
-  filter(!(grepl('MNA', `Country Code`))) %>%
-  filter(!(grepl('NAC', `Country Code`))) %>%
-  filter(!(grepl('OED', `Country Code`))) %>%
-  filter(!(grepl('OSS', `Country Code`))) %>%
-  filter(!(grepl('PRE', `Country Code`))) %>%
-  filter(!(grepl('PST', `Country Code`))) %>%
-  filter(!(grepl('SAS', `Country Code`))) %>%
-  filter(!(grepl('SSA', `Country Code`))) %>%
-  filter(!(grepl('SSF', `Country Code`))) %>%
-  filter(!(grepl('SST', `Country Code`))) %>%
-  filter(!(grepl('TEA', `Country Code`))) %>%
-  filter(!(grepl('TEC', `Country Code`))) %>%
-  filter(!(grepl('TLA', `Country Code`))) %>%
-  filter(!(grepl('TMN', `Country Code`))) %>%
-  filter(!(grepl('TSA', `Country Code`))) %>%
-  filter(!(grepl('TSS', `Country Code`))) %>%
-  filter(!(grepl('UMC', `Country Code`))) %>%
-  filter(!(grepl('WLD', `Country Code`)))
+  filter(!(grepl('AFE', cCode))) %>%
+  filter(!(grepl('AFW', cCode))) %>%
+  filter(!(grepl('ARB', cCode))) %>%
+  filter(!(grepl('CEB', cCode))) %>%
+  filter(!(grepl('EAP', cCode))) %>%
+  filter(!(grepl('EAR', cCode))) %>%
+  filter(!(grepl('EAS', cCode))) %>%
+  filter(!(grepl('ECA', cCode))) %>%
+  filter(!(grepl('ECS', cCode))) %>%
+  filter(!(grepl('EMU', cCode))) %>%
+  filter(!(grepl('EUU', cCode))) %>%
+  filter(!(grepl('FCS', cCode))) %>%
+  filter(!(grepl('HIC', cCode))) %>%
+  filter(!(grepl('HPC', cCode))) %>%
+  filter(!(grepl('IBD', cCode))) %>%
+  filter(!(grepl('IBT', cCode))) %>%
+  filter(!(grepl('IDA', cCode))) %>%
+  filter(!(grepl('IDB', cCode))) %>%
+  filter(!(grepl('AFE', cCode))) %>%
+  filter(!(grepl('IDX', cCode))) %>%
+  filter(!(grepl('LAC', cCode))) %>%
+  filter(!(grepl('LCN', cCode))) %>%
+  filter(!(grepl('LDC', cCode))) %>%
+  filter(!(grepl('LIC', cCode))) %>%
+  filter(!(grepl('LMC', cCode))) %>%
+  filter(!(grepl('LMY', cCode))) %>%
+  filter(!(grepl('LTE', cCode))) %>%
+  filter(!(grepl('MEA', cCode))) %>%
+  filter(!(grepl('MIC', cCode))) %>%
+  filter(!(grepl('MNA', cCode))) %>%
+  filter(!(grepl('NAC', cCode))) %>%
+  filter(!(grepl('OED', cCode))) %>%
+  filter(!(grepl('OSS', cCode))) %>%
+  filter(!(grepl('PRE', cCode))) %>%
+  filter(!(grepl('PST', cCode))) %>%
+  filter(!(grepl('SAS', cCode))) %>%
+  filter(!(grepl('SSA', cCode))) %>%
+  filter(!(grepl('SSF', cCode))) %>%
+  filter(!(grepl('SST', cCode))) %>%
+  filter(!(grepl('TEA', cCode))) %>%
+  filter(!(grepl('TEC', cCode))) %>%
+  filter(!(grepl('TLA', cCode))) %>%
+  filter(!(grepl('TMN', cCode))) %>%
+  filter(!(grepl('TSA', cCode))) %>%
+  filter(!(grepl('TSS', cCode))) %>%
+  filter(!(grepl('UMC', cCode))) %>%
+  filter(!(grepl('WLD', cCode)))
 
 # join
 popGdp <- inner_join(wpop, wgdp)
@@ -695,36 +701,36 @@ popGdpBoT <- inner_join(boT, popGdp)
 # final join
 correlation <- inner_join(popGdpBoT, wHa) %>%
   # dropping column used for joins
-  select(-BoTNorm, -`Country Code`)
+  select(-botNorm, -cCode)
 
 # mutated df for alternative visualization
 correlationAbs <- mutate_if(correlation, is.numeric, funs(abs(.)))
 
 # building area scatter plot
-scatterBoTSu <- ggplot(data = correlation, mapping = aes(x = `Area (1000 ha)`, y = `Balance of Trade (K MT)`)) +
+scatterBoTSu <- ggplot(data = correlation, mapping = aes(x = area,  y = bot)) +
   geom_point() + 
   geom_smooth() +
   labs(
-    title = "Correlazione BoT - superficie",
+    title = "Correlazione BoT - area",
     subtitle = "Il dato della Cina influenza fortemente la linea di tendenza",
     caption = "Dati 2020 per la superificie degli stati",
-    x = "Superficie (1000 ha)"
+    x = "Area (1000 ha)"
   )
 
 # building area scatter plot with abs(BoT)
-scatterBoTSuAbs <- ggplot(data = correlationAbs, mapping = aes(x = `Area (1000 ha)`, y = `Balance of Trade (K MT)`)) +
+scatterBoTSuAbs <- ggplot(data = correlationAbs, mapping = aes(x = area, y = bot)) +
   geom_point() + 
   geom_smooth() +
   labs(
-    title = "Correlazione BoT (abs) - superficie",
+    title = "Correlazione BoT (abs) - area",
     subtitle = "Emerge correlazione",
     caption = "Dati 2020 per la superificie degli stati",
-    x = "Superficie (1000 ha)",
+    x = "Area (1000 ha)",
     y = "Balance of Trade (K MT) (abs)"
   )
 
 # building population scatter plot
-scatterBoTPop <- ggplot(data = correlation, mapping = aes(x = `Population 1000x`, y = `Balance of Trade (K MT)`)) +
+scatterBoTPop <- ggplot(data = correlation, mapping = aes(x = population, y = bot)) +
   geom_point() + 
   geom_smooth() +
   labs(
@@ -734,7 +740,7 @@ scatterBoTPop <- ggplot(data = correlation, mapping = aes(x = `Population 1000x`
   )
 
 # building population scatter plot with abs(BoT)
-scatterBoTPopAbs <- ggplot(data = correlationAbs, mapping = aes(x = `Population 1000x`, y = `Balance of Trade (K MT)`)) +
+scatterBoTPopAbs <- ggplot(data = correlationAbs, mapping = aes(x = population, y = bot)) +
   geom_point() + 
   geom_smooth() +
   labs(
@@ -745,7 +751,7 @@ scatterBoTPopAbs <- ggplot(data = correlationAbs, mapping = aes(x = `Population 
   )
 
 # building gdp scatter plot
-scatterBoTGDP <- ggplot(data = correlation, mapping = aes(x = `GDP$ 2018`, y = `Balance of Trade (K MT)`)) +
+scatterBoTGDP <- ggplot(data = correlation, mapping = aes(x = gdp, y = bot)) +
   geom_point() + 
   geom_smooth() +
   labs(
@@ -755,7 +761,7 @@ scatterBoTGDP <- ggplot(data = correlation, mapping = aes(x = `GDP$ 2018`, y = `
   )
 
 # building gdp scatter plot with abs(BoT)
-scatterBoTGDPAbs <- ggplot(data = correlationAbs, mapping = aes(x = `GDP$ 2018`, y = `Balance of Trade (K MT)`)) +
+scatterBoTGDPAbs <- ggplot(data = correlationAbs, mapping = aes(x = gdp, y = bot)) +
   geom_point() + 
   geom_smooth() +
   labs(
@@ -786,7 +792,7 @@ L'ipotesi naturale per spiegare il valore modesto dei bilanci commerciali degli 
 
 Il BoT è però un dato complesso per cui vale la pena di analizzare tramite scatter plot eventuali correlazioni.
 
-## BoT - superficie
+## BoT - area
 
 ```{r scatterBoTSu, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -837,15 +843,22 @@ scatterBoTGDPAbs
 # importing data (poplation df)
 pop <- read_csv("./data/Population_E_Americas.csv") %>%
   # selecting only the columns we need
-  select(Area, Element, Unit, Value) %>%
+  select(Area, Element, Value) %>%
   # pivot-wider to make it tidy
   pivot_wider(names_from = Element, values_from = Value) %>%
+  select(Area, `Total Population - Both sexes`, `Rural population`, `Urban population`) %>%
   # for visualization
-  arrange(desc(`Total Population - Both sexes`))
+  arrange(desc(`Total Population - Both sexes`)) %>%
+  rename(
+    country = Area,
+    totalPopulation = `Total Population - Both sexes`,
+    ruralPopulation = `Rural population`,
+    urbanPopulation = `Urban population`
+  )
 
 # building scatter plot to compare urbanization
-scatterPopAm <- ggplot(pop[1:8, ], aes(`Urban population`, `Rural population`)) +
-  geom_point(aes(colour = Area)) +
+scatterPopAm <- ggplot(pop[1:8, ], aes(urbanPopulation, ruralPopulation)) +
+  geom_point(aes(colour = country)) +
   geom_smooth(method = "lm") +
   scale_color_brewer(palette="Dark2") +
   labs(
@@ -863,15 +876,21 @@ cens <- read_csv("./data/Word_Census_Agriculture_E_Americas.csv") %>%
   # selecting to make it tidy
   select(Area, Holdings_Area, `Holdings_Average area`, Holdings_Number) %>%
   # for visualization
-  arrange(desc(`Holdings_Area`))
+  arrange(desc(`Holdings_Area`)) %>%
+  rename(
+    country = Area,
+    holdingsArea = `Holdings_Area`,
+    holdingsAverageArea = `Holdings_Average area`,
+    holdingsNumber = `Holdings_Number`
+  )
 
-# building scatter plot to analyze relation between holding number and average area
-scatterHaAm <- ggplot(cens[1:8, ], aes(`Holdings_Number`, `Holdings_Average area`)) +
-  geom_point(aes(colour = Area)) +
+# building scatter plot to analyze relation between holdings number and average area
+scatterHaAm <- ggplot(cens[1:8, ], aes(holdingsNumber, holdingsAverageArea)) +
+  geom_point(aes(colour = country)) +
   geom_smooth(method = "lm") +
   scale_color_brewer(palette="Dark2") +
   labs(
-    title = "Rapporto tra il numero di aziene agricole e la loro superficie media",
+    title = "Rapporto tra il numero di aziene agricole e la loro area media",
     subtitle = "Come prevedibile c'è un rapporto inversalmente proporzionale",
     caption = "Dati da ultimo censimento FAO (2010-2013)"
   )
@@ -879,48 +898,55 @@ scatterHaAm <- ggplot(cens[1:8, ], aes(`Holdings_Number`, `Holdings_Average area
 # importing data (production df)
 prod <- read_csv("./data/Production_Crop_Livestock_E_Americas.csv") %>%
   # selecting only the columns we need
-  select(Area, Item, Element, Unit, Value)
+  select(Area, Item, Element, Unit, Value) %>%
+  rename(
+    country = Area,
+    item = Item,
+    element = Element,
+    unit = Unit,
+    value = Value
+  )
 
 # filtering Canada
-prodCA <- filter(prod, Area == "Canada")
+prodCA <- filter(prod, country == "Canada")
 
 # ungrouping and selection
 prodCA <- ungroup(prodCA) %>%
   # selecting
-  select(-Area)
+  select(-country)
 
 # filtering USA
-prodUSA <- filter(prod, Area == "United States of America")
+prodUSA <- filter(prod, country == "United States of America")
 
 # ungrouping and selection
 prodUSA <- ungroup(prodUSA) %>%
   # selecting
-  select(-Area)
+  select(-country)
 
 # production output for Canada
-prodCAOut <- filter(prodCA, Element == "Production") %>%
-  select(Item, Value) %>%
-  arrange(desc(Value))
+prodCAOut <- filter(prodCA, element == "Production") %>%
+  select(item, value) %>%
+  arrange(desc(value))
 
 # preparing for join
-prodCAOut <- rename(prodCAOut, `Canadian Production (tonnes)` = Value)
+prodCAOut <- rename(prodCAOut, canadianProduction = value)
   
 # production output for USA
-prodUSAOut <- filter(prodUSA, Element == "Production") %>%
-  select(Item, Value) %>%
-  arrange(desc(Value))
+prodUSAOut <- filter(prodUSA, element == "Production") %>%
+  select(item, value) %>%
+  arrange(desc(value))
 
 # preparing for join
-prodUSAOut <- rename(prodUSAOut, `American Production (tonnes)` = Value)
+prodUSAOut <- rename(prodUSAOut, americanProduction = value)
  
 # join
 prodOutCompareUC <- inner_join(prodCAOut, prodUSAOut)
 
 # excluding aggregate and redundant entries
-prodOutCompareUC <- filter(prodOutCompareUC,!(grepl('Total', Item))) %>%
-  filter(!(grepl('Primary', Item))) %>%
-  filter(!(grepl('Incl', Item))) %>%
-  filter(!(grepl(',', Item)))
+prodOutCompareUC <- filter(prodOutCompareUC,!(grepl('Total', item))) %>%
+  filter(!(grepl('Primary', item))) %>%
+  filter(!(grepl('Incl', item))) %>%
+  filter(!(grepl(',', item)))
 
 # computing totals
 caPOTot = sum(prodOutCompareUC$`Canadian Production (tonnes)`)
@@ -940,8 +966,8 @@ m <- list(
 # Canada trace
 barProdAm <- plot_ly(
   prodOutCompareUC,
-  x = ~Item,
-  y = ~`Canadian Production (tonnes)`,
+  x = ~item,
+  y = ~canadianProduction,
   type = 'bar',
   name = 'Canada',
   marker = list(color = 'rgb(102,51,153)')
@@ -950,14 +976,14 @@ barProdAm <- plot_ly(
 # USA trace
 barProdAm <- barProdAm %>%
   add_trace(
-    y = ~`American Production (tonnes)`,
+    y = ~americanProduction,
     name = 'USA',
     marker = list(color = 'rgb(102,204,153)'))
 
 # layout
 barProdAm <- barProdAm %>%
   layout(xaxis = list(title = 'Item', showticklabels=FALSE),
-         yaxis = list(title = 'Tonnes'), # , type='log'
+         yaxis = list(title = 'Tonnes'),
          autosize = F, 
          width = 1000, 
          height = 500, 
@@ -967,14 +993,14 @@ barProdAm <- barProdAm %>%
 
 # transofrming df for further modeling
 prod <- prod %>%
-  filter(Area == "Canada" | Area == "United States of America") %>%
-  filter(Element == "Area harvested") %>%
-  rename(`Area Harvested (ha)` = Value) %>%
-  arrange(desc(`Area Harvested (ha)`))
+  filter(country == "Canada" | country == "United States of America") %>%
+  filter(element == "Area harvested") %>%
+  rename(area = value) %>%
+  arrange(desc(area))
 
 # building box plot to compare harvested area (top 5 crops)
 boxProdAm <- ggplot(data = prod[1:10, ]) +
-  geom_boxplot(mapping = aes(x = `Area`, y = `Area Harvested (ha)`,  fill = `Area`)) +
+  geom_boxplot(mapping = aes(x = country, y = area,  fill = country)) +
   labs(
     title = "Area coltivata",
     subtitle = "Selezione delle prime 5 produzioni per paese",
@@ -982,12 +1008,12 @@ boxProdAm <- ggplot(data = prod[1:10, ]) +
   )
 
 # splitting
-hACa <- filter(prod, Area == "Canada")
-hAUSA <- filter(prod, Area == "United States of America")
+hACa <- filter(prod, country == "Canada")
+hAUSA <- filter(prod, country == "United States of America")
 
 # computing totals
-caHaTot = sum(hACa$`Area Harvested (ha)`, na.rm = TRUE)
-usaHaTot = sum(hAUSA$`Area Harvested (ha)`, na.rm = TRUE)
+caHaTot = sum(hACa$area, na.rm = TRUE)
+usaHaTot = sum(hAUSA$area, na.rm = TRUE)
 ```
 
 ## Canada e USA
@@ -1004,6 +1030,7 @@ Per farlo ci serviamo anche di alcuni nuovi dataset sempre di derivazione FAO (P
 
 Mettiamo a confronto i due stati dal punto di vista della popolazione.
 
+La popolazione è espressa in migliaia di persone.  
 Nelle righe successive della tabella compaiono gli altri stati del continente come contesto.
 
 ```{r popT, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
@@ -1031,6 +1058,7 @@ scatterPopAm
 
 Mettiamo a confronto i due stati dal punto di vista dello sfruttamento del territorio
 
+Area espressa in ettari.  
 Nelle righe successive della tabella compaiono gli altri stati del continente come contesto.
 
 ```{r censT, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
@@ -1067,7 +1095,7 @@ barProdAm
 
 Possiamo quindi concludere che il Canada seppur caratterizzato da un bilancio commerciale positivo non può competere con la capacità produttiva e di export americana per motivi geografici, di popolazione e economici.
 
-Superficie sfruttata a scopo agricolo Canada:
+Area sfruttata a scopo agricolo Canada:
 
 ```{r caHaTot, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1075,7 +1103,7 @@ Superficie sfruttata a scopo agricolo Canada:
 format(round(as.numeric(caHaTot), 1), nsmall=1, big.mark=",")
 ```
 
-Superficie sfruttata a scopo agricolo USA:
+Area sfruttata a scopo agricolo USA:
 
 ```{r usaHaTot, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1083,7 +1111,7 @@ Superficie sfruttata a scopo agricolo USA:
 format(round(as.numeric(usaHaTot), 1), nsmall=1, big.mark=",")
 ```
 
-Questo grafico mostra la superficie in acri dedicata in Canada e in USA alle top 5 produzioni di ciascuno stato
+Questo grafico mostra la area in ettari dedicata in Canada e in USA alle prime 5 produzioni di ciascuno stato
 
 ```{r boxProdAm, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1110,11 +1138,11 @@ production <- read_csv("./data/FoodBalanceSheets_E_All_Data.csv") %>%
   # ungrouping
   ungroup() %>%
   # renaming for visualization
-  rename(Country = Area)
+  rename(country = Area, production = `Production (tonnes)`)
 
 # a df so that we can easily remove aggregate entries
 countryList <- select(borders, ADMIN) %>%
-  rename(Country = ADMIN)
+  rename(country = ADMIN)
 
 # only way I found to be working to remove that column
 countryList$geometry <- NULL
@@ -1138,34 +1166,39 @@ export <- read_csv("./data/Trade_CropsLivestock_E_All_Data.csv") %>%
     `Export Value_1000 US$` = sum(`Export Value_1000 US$`, na.rm=TRUE)
     ) %>%
   # for visualization
-  arrange(desc(`Export Quantity_tonnes`))
+  arrange(desc(`Export Quantity_tonnes`)) %>%
+  rename(
+    country = Area,
+    exportTonnes = `Export Quantity_tonnes`,
+    exportN = `Export Quantity_No`,
+    exportHead = `Export Quantity_Head`,
+    export1000Head = `Export Quantity_1000 Head`,
+    `exportValue1000US$` = `Export Value_1000 US$`
+  )
 
-# importing data (trade matrix)
+  # importing data (trade matrix)
 trade <- read_csv("./data/Trade_DetailedTradeMatrix_E_All_Data.csv") %>%
   # selecting only the columns we need
   select(`Partner Countries`, Element, Item, Value) %>%
   filter(Element == "Export Quantity") %>%
   group_by(`Partner Countries`) %>%
   summarize(Value = sum(Value, na.rm = TRUE)) %>%
-  rename(`Quantity (K MT)` = Value)
+  rename(country = `Partner Countries`, quantity = Value)
 
 # normalization so that it works better with the palette but without distortion
-minTrade <- min(trade$`Quantity (K MT)`)
-maxTrade <- max(trade$`Quantity (K MT)`)
-trade <- mutate(trade, `QNorm` =
-                    (`Quantity (K MT)` - minTrade) / (maxTrade - minTrade))
+minTrade <- min(trade$quantity)
+maxTrade <- max(trade$quantity)
+trade <- mutate(trade, qNorm =
+                    (quantity - minTrade) / (maxTrade - minTrade))
   
 # building export map
   
 # geo data already imported
 
-# aligning column names
-trade <- rename(trade, Country = `Partner Countries`)
-
 # fixing country name mismatches
 
 # let's find conflicts
-countriesToFix <- anti_join(trade, borders, by = c("Country" = "ADMIN"))
+countriesToFix <- anti_join(trade, borders, by = c("country" = "ADMIN"))
 
 # fixing
 trade[trade == "Bahamas"] <- "The Bahamas"
@@ -1205,17 +1238,22 @@ trade = trade[-39,]
 trade = trade[-185,]
 
 # left outer join between our df and the geographic data
-borders <- left_join(borders, trade, by = c("ADMIN" = "Country"))
+borders <- left_join(borders, trade, by = c("ADMIN" = "country"))
 
 # building the map
 
 # setting the palette
-palette <- colorBin("viridis", borders$QNorm)
+palette <- colorBin("viridis", borders$qNorm)
 
 # making labels
 labels <- sprintf("<strong>%s</strong><br/>%s K MT", borders$ADMIN,
-                  format(round(as.numeric(borders$`Quantity (K MT)`), 1), nsmall=1, big.mark=",")) %>%
+                  format(round(as.numeric(borders$quantity), 1), nsmall=1, big.mark=",")) %>%
   lapply(htmltools::HTML)
+
+# entries for custom legend
+legendLabels <- tibble(
+  "0", "10,000,000", "30,000,000", "50,000,000", "70,000,000", "NA"
+  )
 
 # actual building
 mapTrade <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = "100%") %>%
@@ -1226,25 +1264,31 @@ mapTrade <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = "
     color = '#ffffff', 
     weight = 1, 
     opacity = 0.5, 
-    fillColor = ~palette(QNorm), 
+    fillColor = ~palette(qNorm), 
     fillOpacity = 0.7, 
     highlight = highlightOptions(weight = 5), 
     label = labels
-    ) #%>%
+    ) %>%
   # legend
-  #addLegend("bottomright", pal = palette, values = ~QNorm, title = "Quantity (%)", opacity = 1
-            #)
+  addLegend("bottomright", pal = palette, values = ~qNorm, title = "Quantity (K MT)", opacity = 1, labFormat = 
+              function(type, cuts, p) {paste0(legendLabels)}
+            )
 
 # building second map without China
 
 # removing China outlier
-borders$`Quantity (K MT)`[borders$ADMIN == "China"] <- NA
+borders$quantity[borders$ADMIN == "China"] <- NA
 
 # normalization so that it works better with the palette but without distortion
-minTrade <- min(borders$`Quantity (K MT)`, na.rm = TRUE)
-maxTrade <- max(borders$`Quantity (K MT)`, na.rm = TRUE)
-borders <- mutate(borders, `QNorm` =
-                    (`Quantity (K MT)` - minTrade) / (maxTrade - minTrade))
+minTrade <- min(borders$quantity, na.rm = TRUE)
+maxTrade <- max(borders$quantity, na.rm = TRUE)
+borders <- mutate(borders, qNorm =
+                    (quantity - minTrade) / (maxTrade - minTrade))
+
+# entries for custom legend
+legendLabels <- tibble(
+  "0", "2,000,000", "4,000,000", "6,000,000", "8,000,000", "NA"
+  )
 
 # actual building
 mapTradeB <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = "100%") %>%
@@ -1255,26 +1299,32 @@ mapTradeB <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = 
     color = '#ffffff', 
     weight = 1, 
     opacity = 0.5, 
-    fillColor = ~palette(QNorm), 
+    fillColor = ~palette(qNorm), 
     fillOpacity = 0.7, 
     highlight = highlightOptions(weight = 5), 
     label = labels
-    ) #%>%
+    ) %>%
   # legend
-  #addLegend("bottomright", pal = palette, values = ~QNorm, title = "Quantity (%)", opacity = 1
-            #)
+  addLegend("bottomright", pal = palette, values = ~qNorm, title = "Quantity (K MT)", opacity = 1, labFormat = 
+              function(type, cuts, p) {paste0(legendLabels)}
+            )
     
 
 # building third map without Iran
 
 # removing Iran outlier
-borders$`Quantity (K MT)`[borders$ADMIN == "Iran"] <- NA
+borders$quantity[borders$ADMIN == "Iran"] <- NA
 
 # normalization so that it works better with the palette but without distortion
-minTrade <- min(borders$`Quantity (K MT)`, na.rm = TRUE)
-maxTrade <- max(borders$`Quantity (K MT)`, na.rm = TRUE)
-borders <- mutate(borders, `QNorm` =
-                    (`Quantity (K MT)` - minTrade) / (maxTrade - minTrade))
+minTrade <- min(borders$quantity, na.rm = TRUE)
+maxTrade <- max(borders$quantity, na.rm = TRUE)
+borders <- mutate(borders, qNorm =
+                    (quantity - minTrade) / (maxTrade - minTrade))
+
+# entries for custom legend
+legendLabels <- tibble(
+  "0", "1,500,000", "3,000,000", "4,500,000", "6,000,000", "NA"
+  )
 
 # actual building
 mapTradeC <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = "100%") %>%
@@ -1285,14 +1335,15 @@ mapTradeC <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = 
     color = '#ffffff', 
     weight = 1, 
     opacity = 0.5, 
-    fillColor = ~palette(QNorm), 
+    fillColor = ~palette(qNorm), 
     fillOpacity = 0.7, 
     highlight = highlightOptions(weight = 5), 
     label = labels
-    ) #%>%
+    ) %>%
   # legend
-  #addLegend("bottomright", pal = palette, values = ~QNorm, title = "Quantity (%)", opacity = 1
-            #)
+  addLegend("bottomright", pal = palette, values = ~qNorm, title = "Quantity (K MT)", opacity = 1, labFormat = 
+              function(type, cuts, p) {paste0(legendLabels)}
+            )
 ```
 
 ## Il Brasile
@@ -1301,7 +1352,7 @@ Concludiamo analizzando ora lo stato caratterizzato dal massimo BoT positivo.
 
 Come sempre iniziamo mettendo qualche punto per poi mostrare alcuni modelli.
 
-I dati sfruttati per questa parte provengono dai dataset usati in precedenza e da uno nuovo.  
+I dati per questa parte provengono dai dataset usati in precedenza e da uno nuovo.  
 Nel dataset "Detailed Trade Matrix" vengono infatti descritti gli scambi commerciali tra i paesi.
 
 Useremo questo dataset per costruire una mappa con la quale visualizzare le esportazioni del Brasile.
@@ -1341,16 +1392,307 @@ export %>%
 mapTrade
 ```
 
-## La mappa mondiale dell'export brasiliano
+## La mappa mondiale dell'export brasiliano II
 
 ```{r mapTradeB, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
 mapTradeB
 ```
 
-## La mappa mondiale dell'export brasiliano
+## La mappa mondiale dell'export brasiliano III
 
 ```{r mapTradeC, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
 mapTradeC
+```
+
+# Sustainability
+
+```{r susCC, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# building dfs for issues of sustainability and climate change
+
+
+# importing data (pesticides use)
+pstc <- read_csv("./data/Inputs_Pesticides_Use_E_All_Data.csv") %>%
+  select(Area, Item, Value) %>% # unit is kilo tonnes
+  pivot_wider(names_from = Item, values_from = Value) %>%
+  select(Area, `Pesticides (total)` ) %>%
+  arrange(desc(`Pesticides (total)`)) %>%
+  rename(country = Area, pesticides = `Pesticides (total)`) %>%
+  # filtering redundant entry for China mainland
+  filter(!(grepl('mainland', country)))
+
+pstcP <- inner_join(pstc, production)
+
+pstc[pstc == "Russian Federation"] <- "Russia"
+pstc[pstc == "United States of America"] <- "USA"
+
+# importing data (soil nutrient use)
+sNu <- read_csv("./data/Environment_Soil_nutrient_budget_E_All_Data.csv") %>%
+  select(Area, Element, Item, Unit, Value) %>%
+   rename(
+     country = Area,
+     element = Element,
+     item = Item,
+     unit = Unit,
+     value = Value
+     )
+
+sNu[sNu == "United States of America"] <- "USA"
+
+sNupHa <- filter(sNu, element == "Cropland nutrient flow per unit area")
+
+sNu <- filter(sNu, element == "Cropland nutrient flow") %>%
+  select(- element, - unit) %>%
+  pivot_wider(names_from = item, values_from = value) %>%
+  arrange(desc(`Atmospheric Deposition`)) %>%
+  rename(
+    synthetic = `Synthetic Fertilizers`,
+    manure = `Manure applied to Soils`,
+    deposition = `Atmospheric Deposition`,
+    cropRemoval = `Crop Removal`,
+    bioFixation = `Biological Fixation`
+  )
+
+sNupHa <- select(sNupHa, -element, -unit) %>%
+  group_by(country) %>%
+  summarize(quantity = sum(value, na.rm = TRUE)) %>%
+  arrange(desc(quantity))
+
+sNupHa[sNupHa == "China, mainland"] <- "China"
+
+sNup <- group_by(sNu, country) %>%
+  summarize(quantity = sum(synthetic, manure, deposition, cropRemoval, bioFixation, na.rm = TRUE))
+
+sNuP <- inner_join(sNup, production)
+
+barPstc <- ggplot(data = pstc[1:10, ]) +
+  geom_bar(stat = "identity", mapping = aes(x = country, y = pesticides, fill = country)) +
+  scale_color_brewer(palette="Dark2") +
+  #theme_dark() +
+  labs(
+    title = "Uso di pesticidi",
+    subtitle = "Primi 10 paesi per uso (in MT)",
+    caption = "Dati 2020"
+  )
+
+scatterPstcP <- ggplot(pstcP, aes(production, pesticides)) +
+  geom_point(show.legend = FALSE) +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Rapporto tra uso di pesticidi e produzione",
+    subtitle = "L'uso di pesticidi è linearmente proporzionale alla produzione",
+    caption = "Dati 2020"
+  )
+
+barSNupHa <- ggplot(data = sNupHa[1:7, ]) +
+  geom_bar(stat = "identity", mapping = aes(x = country, y = quantity, fill = country)) +
+  scale_color_brewer(palette="Dark2") +
+  labs(
+    title = "Uso di nutrienti per ettaro",
+    subtitle = "Primi 7 paesi per uso di nutrienti per ettaro coltivato",
+    caption = "Dati 2020"
+  )
+
+scatterSnuP <- ggplot(sNuP, aes(production, quantity)) +
+  geom_point(show.legend = FALSE) +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Rapporto tra uso di nutrienti e produzione",
+    subtitle = "L'uso di nutrienti è linearmente proporzionale alla produzione",
+    caption = "Dati 2020"
+  )
+
+# importing data (emission totals)
+eTot <- read_csv("./data/Emissions_Totals_E_All_Data.csv") %>%
+  select(Area, Element, Item, Value) %>%
+  filter(!(grepl('mainland', Area))) %>%
+  arrange(desc(`Value`)) %>%
+  rename(
+     country = Area,
+     element = Element,
+     item = Item,
+     value = Value
+     )
+  
+eTotKable <-  pivot_wider(eTot, names_from = item, values_from = value) %>%
+  filter(element == "Emissions (CO2)") %>%
+  select(country, `Net Forest conversion`, `Fires in organic soils`, `Drained organic soils (CO2)`, `On-farm energy use`, `Forestland`) %>%
+  rename(
+    forestConversion = `Net Forest conversion`,
+    fires = `Fires in organic soils`,
+    drainedCO2 = `Drained organic soils (CO2)`,
+    farmEnergyUse = `On-farm energy use`,
+    forest = `Forestland`
+  )
+
+# filtering redundant entry for China mainland
+eTot <- filter(eTot, country == "China" | country == "India" | country == "China" | country == "Brazil" | country == "United States of America")
+
+# building box plot to compare emissions from top food producing countries
+boxProdEt <- ggplot(data = eTot[1:92,]) + #26, 28, 48, 69, 92
+  geom_boxplot(mapping = aes(x = country, y = value,  fill = country)) +
+  labs(
+    title = "Emissioni nei maggiori produttori di cibo",
+    subtitle = "Selezione delle fonti rilevanti",
+    caption = "Dati 2020"
+  ) +
+  theme_classic()
+
+# importing data (emissions, time)
+eTime <- read_csv("./data/FAOSTAT_data_en_8-29-2022.csv") %>%
+  rename(country = Area)
+
+eTime <- inner_join(eTime, countryList)
+
+eTime <- select(eTime, country, Element, Year, Value) %>%
+  group_by(country, Year) %>%
+  summarize(Value = sum(Value, na.rm = TRUE)) %>%
+  pivot_wider(names_from = Year, values_from = Value) %>%
+  arrange(desc(`2019`))
+
+eTime <- pivot_longer(eTime, cols = - country,
+    names_to = "year",
+    names_prefix = "",
+    values_to = "value"
+  )
+
+# margins
+m <- list(
+  l = 50,
+  r = 50,
+  b = 100,
+  t = 100,
+  pad = 4
+)
+
+scatterETime <- plot_ly(
+  data = eTime[1:2950, ],
+  x = ~country,
+  y = ~`value`,
+  frame = ~year,
+  color = ~country,
+  hovermode = "x",
+  type = 'scatter',
+  mode = 'markers',
+  showlegend = FALSE,
+  autosize = F, 
+  width = 1000, 
+  height = 500, 
+  margin = m
+  )
+
+# layout
+scatterETime <- scatterETime %>%
+  layout(xaxis = list(title = 'Country', showticklabels=FALSE),
+         yaxis = list(title = 'Tonnes'))
+```
+
+## Pesticidi
+
+Il primo tema legato alla sostenibilità da affrontare è relativo ai pesticidi.
+
+Quantità espresse in tonnellate.  
+La tabella e il grafico successivo propongono una presentazione generale sul loro uso.
+
+```{r pstc, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+# building table
+pstc %>%
+  mutate_if(is.numeric, funs(format(round(as.numeric(., 0), 1), nsmall=1, big.mark=","))) %>%
+  kable() %>%
+  kable_minimal(c("striped", "hover", "condensed", "responsive"), font_size = 15) %>%
+  scroll_box(width = "100%", height = "450px")
+```
+
+<br>
+
+```{r barPstc, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+barPstc
+```
+
+## Pesticidi e produzione
+
+Come abbiamo visto i maggiori stati produttori non coincidono esattamente con i maggiori utilizzatori di pesticidi.  
+Questo ovviamente dipende dal tipo delle produzioni.
+
+É comunque naturale aspettarsi che l'impiego di pesticidi sia linearmente proporzionale alla produzione.
+
+```{r scatterPstcP, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+scatterPstcP
+```
+
+## Nutrimento del suolo
+
+Il nutrimento del suolo è il secondo aspetto relativo agli input e alla sostenibilità della produzione.
+
+Quantità espresse in tonnellate.  
+La tabella e il grafico successivo propongono una presentazione generale sul loro uso.
+
+```{r sNu, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+# building table
+sNu %>%
+  mutate_if(is.numeric, funs(format(round(as.numeric(., 0), 1), nsmall=1, big.mark=","))) %>%
+  kable() %>%
+  kable_minimal(c("striped", "hover", "condensed", "responsive"), font_size = 15) %>%
+  scroll_box(width = "100%", height = "450px")
+```
+
+<br>
+
+```{r barSNupHa, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+barSNupHa
+```
+
+## Nutrienti e produzione
+
+Anche i maggiori utlilizzatori di nutrienti non coincidono con i maggiori stati produttori.
+
+Resta però naturale aspettarsi che l’impiego di nutrienti sia linearmente proporzionale alla produzione.
+
+```{r scatterSnuP, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+scatterSnuP
+```
+
+## Emissioni
+
+L'ultimo dataset che prenderemo in considerazione è relativo alle emissioni.
+
+Quantità espresse in tonnellate.  
+La tabella sottostante è relativa alle emissioni di CO2, organizzate per fonte.  
+In questa tabella è riportato anche il dato relativo ai terreni forestali.  
+FAO lo considera nel calcolo delle emissioni nette.
+
+```{r eTotKable, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+# building table
+eTotKable %>%
+  mutate_if(is.numeric, funs(format(round(as.numeric(., 0), 1), nsmall=1, big.mark=","))) %>%
+  kable() %>%
+  kable_minimal(c("striped", "hover", "condensed", "responsive"), font_size = 15) %>%
+  scroll_box(width = "100%", height = "450px")
+```
+
+<br>
+
+Questo grafico ci permette di visualizzare la composizione delle emissioni nei principali stati produttori di cibo.
+
+```{r boxProdEt, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+boxProdEt
+```
+
+## Emissioni nel tempo
+
+Per concludere uno scatter plot per visualizzare l'andamento delle emissioni derivate dall'attività agricola nel corso del tempo.
+
+```{r scatterETime, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
+
+scatterETime
 ```
