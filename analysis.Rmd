@@ -41,7 +41,7 @@ library(RColorBrewer)
 Per il mio progetto di data science ho scelto il tema della produzione e distribuzione del cibo sui mercati internazionali.
 
 Mi concentrerò sull'aspetto della produzione e distribuzione della materia prima e non sulle connotazioni economiche del fenomeno.  
-Riferimenti all'economia potranno però essere talvolta presenti, così come sono presenti riferimenti a condizioni geografiche o sociali che hanno effetti più o meno diretti sui dati trattati.
+Riferimenti all'economia potranno essere talvolta presenti, così come sono presenti riferimenti a condizioni geografiche o sociali che hanno effetti più o meno diretti sui dati trattati.
 
 L'analisi parte dalla visualizzazione di un dato che ho sfruttato io stesso per orientarmi.  
 In seguito si cercano nei dati risposte a quesiti sorti proprio osservando questo modello iniziale.  
@@ -64,9 +64,9 @@ I dataset utilizzati sono:
 csvList <- list.files("./data/", pattern = ".csv$")
 csvList
 ```
-La maggior parte sono stati ottenuti tramite l'opzione di bulk download offerta dal sito FAOSTAT.
-Solo in alcuni casi tramite interrogazioni poste al sistema stesso per motivi di formati e compatibilità.  
-I dataset 1 e 7 sono invece accessori, necessari per alcune visualizzazioni.
+
+La maggior parte sono stati ottenuti tramite l'opzione di bulk download offerta dal sito FAOSTAT e solo in alcuni casi tramite interrogazioni poste al sistema stesso per motivi di formati e compatibilità.  
+I dataset 1 e 8 sono invece accessori, necessari per alcune visualizzazioni.
 
 # Food Balance
 
@@ -228,6 +228,7 @@ sUA <- read_csv("./data/SUA_Crops_Livestock_E_Asia.csv") %>%
   # 3-year average
   group_by(Area, Item, Element, Unit) %>%
   summarize(Quantity = sum(Y2017, Y2018, Y2019, na.rm=TRUE)/3) %>%
+  # names
   rename(country = Area, item = Item, element = Element, unit = Unit, quantity = Quantity)
 
 # ungrouping
@@ -367,11 +368,12 @@ sUAChinaC <- filter(sUAChinaC,!(grepl('Total', item))) %>%
     `Food supply quantity (tonnes)`,
     `Other uses (non-food)`, na.rm=TRUE), across()) %>%
   arrange(desc(`Consumption Quantity`)) %>%
+  # names
   rename(
-    exportQuantity = `Export Quantity`,
-    consumptionQuantity = `Consumption Quantity`,
+    export = `Export Quantity`,
+    consumption = `Consumption Quantity`,
     otherUsesNonFood = `Other uses (non-food)`,
-    foodSupplyQuantity = `Food supply quantity (tonnes)`,
+    foodSupply = `Food supply quantity (tonnes)`,
     loss = Loss,
     processed = Processed,
     feed = Feed)
@@ -408,10 +410,10 @@ sUAIndiaC <- filter(sUAIndiaC,!(grepl('Total', item))) %>%
     `Other uses (non-food)`, na.rm=TRUE), across()) %>%
   arrange(desc(`Consumption Quantity`)) %>%
   rename(
-    exportQuantity = `Export Quantity`,
-    consumptionQuantity = `Consumption Quantity`,
+    export = `Export Quantity`,
+    consumption = `Consumption Quantity`,
     otherUsesNonFood = `Other uses (non-food)`,
-    foodSupplyQuantity = `Food supply quantity (tonnes)`,
+    foodSupply = `Food supply quantity (tonnes)`,
     loss = Loss,
     processed = Processed,
     feed = Feed)
@@ -420,15 +422,15 @@ sUAIndiaC <- filter(sUAIndiaC,!(grepl('Total', item))) %>%
 sUAIndiaC <- ungroup(sUAIndiaC)
 
 # computing totals
-cCTot = sum(sUAChinaC$consumptionQuantity, na.rm = TRUE)
-iCTot = sum(sUAIndiaC$consumptionQuantity, na.rm = TRUE)
+cCTot = sum(sUAChinaC$consumption, na.rm = TRUE)
+iCTot = sum(sUAIndiaC$consumption, na.rm = TRUE)
 
 # China consumption plot
 scatterSUAChinaC <- plot_ly(
   sUAChinaC,
-  x = ~exportQuantity,
-  y = ~consumptionQuantity,
-  size = ~foodSupplyQuantity,
+  x = ~consumption,
+  y = ~export,
+  size = ~foodSupply,
   color = ~item,
   colors = c("#440154", "#46327e", "#365c8d", "#277f8e", "#1fa187", "#4ac16d", "#a0da39", "#fde725"),
   hovermode = "x",
@@ -447,9 +449,9 @@ scatterSUAChinaC <- scatterSUAChinaC %>%
 # India consumption plot
 scatterSUAIndiaC <- plot_ly(
   sUAIndiaC,
-  x = ~exportQuantity,
-  y = ~consumptionQuantity,
-  size = ~foodSupplyQuantity,
+  x = ~consumption,
+  y = ~export,
+  size = ~foodSupply,
   color = ~item,
   colors = c("#440154", "#46327e", "#365c8d", "#277f8e", "#1fa187", "#4ac16d", "#a0da39", "#fde725"),
   hovermode = "x",
@@ -473,7 +475,8 @@ Mentre la Cina è il più grande importatore netto di cibo al mondo, l'India ha 
 
 Per capire le ragioni di questa differenza analizzeremo la produzione e il consumo di cibo nei due paesi.
 
-Ci serviremo di un dataset diverso, incentrato sulla contabilità alimentare degli stati (Supply Utilization Accounts).
+Ci serviremo di un dataset diverso, incentrato sulla contabilità alimentare degli stati (Supply Utilization Accounts).  
+Le quantità sono espresse in tonnellate.
 
 ## Produzione
 
@@ -492,8 +495,6 @@ barSUAP
 Come emerge navigando il grafico, nonostante alcuni settori in cui l'India è specializzata, la produzione di cibo in Cina è globalmente superiore.  
 La Cina è infatti (come vedremo in seguito) il più grande produttore di cibo al mondo, seguita proprio dall'India.
 
-Le quantità sono espresse in tonnellate.
-
 ```{r sUAP, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
 # disabling scientific notation
@@ -511,7 +512,6 @@ sUAP %>%
 Chiarito che non è l'output produttivo a determinare la condizione cinese non ci resta che esplorare l'aspetto dei consumi.
 
 Sfrutteremo un'opportuna rielaborazione del dataset usato in precedenza.  
-Tutte le quantità seguenti sono in tonnellate.
 
 Cina:
 
@@ -576,6 +576,7 @@ scatterSUAChinaC
 ```
 
 <br>
+
 India:
 
 ```{r scatterSUAIndiaC, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
@@ -584,7 +585,8 @@ scatterSUAIndiaC
 ```
 
 <br>
-Possiamo quindi concludere che la differenza evidenziata dalla mappa è da ricondurre in primo luogo ad un maggiore consumo interno della produzione in Cina e in secondo luogo ad una propensione alla quasi totale esportazione di alcune produzioni in India.
+
+Possiamo quindi concludere che la differenza evidenziata dalla mappa è da ricondurre ad un maggiore consumo interno in Cina.
 
 # Area, population and GDP
 
@@ -620,7 +622,9 @@ boxBoTA <- ggplot(data = boTA) +
     title = "BoT Africa per regione",
     subtitle = "Intermediate-region =  NA per gli stati della Northern Africa",
     caption = "Gli outsider sono più grandi, popolosi e ricchi",
-    x = "Intermediate-region"
+    fill = "Sub-region",
+    x = "Intermediate-region",
+    y = "BoT (K MT)"
   )
 
 # importing area data from a new dataset (we need ISO3 names)
@@ -714,7 +718,8 @@ scatterBoTSu <- ggplot(data = correlation, mapping = aes(x = area,  y = bot)) +
     title = "Correlazione BoT - area",
     subtitle = "Il dato della Cina influenza fortemente la linea di tendenza",
     caption = "Dati 2020 per la superificie degli stati",
-    x = "Area (1000 ha)"
+    x = "Area (1000 ha)", 
+    y = "BoT (K MT)"
   )
 
 # building area scatter plot with abs(BoT)
@@ -723,10 +728,9 @@ scatterBoTSuAbs <- ggplot(data = correlationAbs, mapping = aes(x = area, y = bot
   geom_smooth() +
   labs(
     title = "Correlazione BoT (abs) - area",
-    subtitle = "Emerge correlazione",
     caption = "Dati 2020 per la superificie degli stati",
     x = "Area (1000 ha)",
-    y = "Balance of Trade (K MT) (abs)"
+    y = "BoT (K MT) (abs)"
   )
 
 # building population scatter plot
@@ -736,7 +740,9 @@ scatterBoTPop <- ggplot(data = correlation, mapping = aes(x = population, y = bo
   labs(
     title = "Correlazione BoT - popolazione",
     subtitle = "I valori di Cina e India influenzano fortemente la linea di tendenza",
-    caption = "Dati 2018 per la popolazione degli stati"
+    caption = "Dati 2018 per la popolazione degli stati",
+    x = "Population (1000x)",
+    y = "BoT (K MT)"
   )
 
 # building population scatter plot with abs(BoT)
@@ -745,9 +751,9 @@ scatterBoTPopAbs <- ggplot(data = correlationAbs, mapping = aes(x = population, 
   geom_smooth() +
   labs(
     title = "Correlazione BoT (abs) - popolazione",
-    subtitle = "Il dato dell'India influenza fortemente la linea di tendenza",
     caption = "Dati 2018 per la popolazione degli stati",
-    y = "Balance of Trade (K MT) (abs)"
+    x = "Population (1000x)",
+    y = "BoT (K MT) (abs)"
   )
 
 # building gdp scatter plot
@@ -758,6 +764,8 @@ scatterBoTGDP <- ggplot(data = correlation, mapping = aes(x = gdp, y = bot)) +
     title = "Correlazione BoT - GDP",
     subtitle = "Da notare l'andamento della curva",
     caption = "Dati 2018 per il GDP degli stati",
+    x = "GDP",
+    y = "BoT (K MT)"
   )
 
 # building gdp scatter plot with abs(BoT)
@@ -766,9 +774,9 @@ scatterBoTGDPAbs <- ggplot(data = correlationAbs, mapping = aes(x = gdp, y = bot
   geom_smooth() +
   labs(
     title = "Correlazione BoT (abs) - GDP",
-    subtitle = "Si conferma l'andamento precedente",
     caption = "Dati 2018 per il GDP degli stati",
-    y = "Balance of Trade (K MT) (abs)"
+    x = "GDP",
+    y = "BoT (K MT) (abs)"
   )
 ```
 
@@ -790,7 +798,7 @@ Gli stati del Nord Africa sono certamente favoriti nel commercio tramite il Medi
 
 L'ipotesi naturale per spiegare il valore modesto dei bilanci commerciali degli stati subsahariani è che ciò sia dovuto al fatto che si tratta spesso di stati piccoli, poco popolati e poco sviluppati.
 
-Il BoT è però un dato complesso per cui vale la pena di analizzare tramite scatter plot eventuali correlazioni.
+Il BoT è però un dato complesso per cui vale la pena di analizzare tramite scatter plot queste correlazioni.
 
 ## BoT - area
 
@@ -864,7 +872,10 @@ scatterPopAm <- ggplot(pop[1:8, ], aes(urbanPopulation, ruralPopulation)) +
   labs(
     title = "Rapporto tra popolazione urbana e rurale",
     subtitle = "Si noti il posizionamento degli stati rispetto alla linea di tendenza (lm)",
-    caption = "Dati 2018"
+    caption = "Dati 2018",
+    x = "Urban Population",
+    y = "Rural Population",
+    fill = 'Country' # not working
   )
 
 # importing data (census df)
@@ -892,7 +903,10 @@ scatterHaAm <- ggplot(cens[1:8, ], aes(holdingsNumber, holdingsAverageArea)) +
   labs(
     title = "Rapporto tra il numero di aziene agricole e la loro area media",
     subtitle = "Come prevedibile c'è un rapporto inversalmente proporzionale",
-    caption = "Dati da ultimo censimento FAO (2010-2013)"
+    caption = "Dati da ultimo censimento FAO (2010-2013)",
+    x = "Holdings Number",
+    y = "Holdings Average Area",
+    fill = 'Country' # not working
   )
 
 # importing data (production df)
@@ -1004,7 +1018,10 @@ boxProdAm <- ggplot(data = prod[1:10, ]) +
   labs(
     title = "Area coltivata",
     subtitle = "Selezione delle prime 5 produzioni per paese",
-    caption = "Dati 2020"
+    caption = "Dati 2020",
+    x = "",
+    y = "Area (1000 ha)",
+    fill = 'Country'
   )
 
 # splitting
@@ -1030,8 +1047,8 @@ Per farlo ci serviamo anche di alcuni nuovi dataset sempre di derivazione FAO (P
 
 Mettiamo a confronto i due stati dal punto di vista della popolazione.
 
-La popolazione è espressa in migliaia di persone.  
-Nelle righe successive della tabella compaiono gli altri stati del continente come contesto.
+Nelle righe successive della tabella compaiono gli altri stati del continente come contesto.  
+La popolazione è espressa in migliaia di persone.
 
 ```{r popT, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1058,8 +1075,9 @@ scatterPopAm
 
 Mettiamo a confronto i due stati dal punto di vista dello sfruttamento del territorio
 
-Area espressa in ettari.  
-Nelle righe successive della tabella compaiono gli altri stati del continente come contesto.
+
+Nelle righe successive della tabella compaiono gli altri stati del continente come contesto.  
+Area espressa in migliaia di ettari.
 
 ```{r censT, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1083,8 +1101,6 @@ scatterHaAm
 ## Produzione
 
 In questo caso emerge ancor più chiaramente come ci sia un'enorme differenza tra la capacità produttiva dei due paesi.
-
-Gli Stati Uniti sono infatti il terzo produttore mondiale di cibo, dopo i già trattati Cina e India.
 
 ```{r barProdAm, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1111,7 +1127,7 @@ Area sfruttata a scopo agricolo USA:
 format(round(as.numeric(usaHaTot), 1), nsmall=1, big.mark=",")
 ```
 
-Questo grafico mostra la area in ettari dedicata in Canada e in USA alle prime 5 produzioni di ciascuno stato
+Questo grafico mostra l'area in ettari dedicata in Canada e in USA alle prime 5 produzioni di ciascuno stato
 
 ```{r boxProdAm, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1167,23 +1183,31 @@ export <- read_csv("./data/Trade_CropsLivestock_E_All_Data.csv") %>%
     ) %>%
   # for visualization
   arrange(desc(`Export Quantity_tonnes`)) %>%
+  # names
   rename(
     country = Area,
-    exportTonnes = `Export Quantity_tonnes`,
+    export1000Tonnes = `Export Quantity_tonnes`,
     exportN = `Export Quantity_No`,
     exportHead = `Export Quantity_Head`,
     export1000Head = `Export Quantity_1000 Head`,
     `exportValue1000US$` = `Export Value_1000 US$`
-  )
+  ) %>%
+  # ungrouping
+  ungroup()
 
-  # importing data (trade matrix)
+# to fit better in the kable
+export[export == "United States of America"] <- "USA"
+
+# importing data (trade matrix)
 trade <- read_csv("./data/Trade_DetailedTradeMatrix_E_All_Data.csv") %>%
   # selecting only the columns we need
   select(`Partner Countries`, Element, Item, Value) %>%
   filter(Element == "Export Quantity") %>%
   group_by(`Partner Countries`) %>%
   summarize(Value = sum(Value, na.rm = TRUE)) %>%
-  rename(country = `Partner Countries`, quantity = Value)
+  rename(country = `Partner Countries`, quantity = Value) %>%
+  # ungrouping
+  ungroup()
 
 # normalization so that it works better with the palette but without distortion
 minTrade <- min(trade$quantity)
@@ -1350,16 +1374,18 @@ mapTradeC <- leaflet(borders , options = leafletOptions(minZoom = 2.1), width = 
 
 Concludiamo analizzando ora lo stato caratterizzato dal massimo BoT positivo.
 
-Come sempre iniziamo mettendo qualche punto per poi mostrare alcuni modelli.
+Come sempre iniziamo stabilendo qualche punto per poi mostrare dei modelli.
 
-I dati per questa parte provengono dai dataset usati in precedenza e da uno nuovo.  
+I dati per questa parte provengono da dataset usati in precedenza e da uno nuovo.  
 Nel dataset "Detailed Trade Matrix" vengono infatti descritti gli scambi commerciali tra i paesi.
 
-Useremo questo dataset per costruire una mappa con la quale visualizzare le esportazioni del Brasile.
+Useremo questo dataset per costruire una mappa con la quale visualizzare le esportazioni del Brasile.  
+Come per la mappa precedente è stata effettuata una normalizzazione sui valori.
 
 ## Produzione
 
-Il Brasile è uno dei principali produttori di cibo a livello mondiale.
+Il Brasile è uno dei principali produttori di cibo a livello mondiale.  
+Valori in migliaia di tonnellate.
 
 ```{r wProd, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1373,7 +1399,7 @@ production %>%
 
 ## Export
 
-Naturalmente figura anche tra i maggiori esportatori.
+Naturalmente figura anche tra i maggiori esportatori.  
 
 ```{r wExp, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1385,21 +1411,27 @@ export %>%
   scroll_box(width = "100%", height = "450px")
 ```
 
-## La mappa mondiale dell'export brasiliano
+## Mappa mondiale dell'export brasiliano
+
+L'export verso la Cina è 8 volte superiore a quello verso il secondo paese partner.
 
 ```{r mapTrade, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
 mapTrade
 ```
 
-## La mappa mondiale dell'export brasiliano II
+## Mappa mondiale dell'export brasiliano II
+
+Anche in questo caso c'è un outlier relativo, l'Iran.
 
 ```{r mapTradeB, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
 mapTradeB
 ```
 
-## La mappa mondiale dell'export brasiliano III
+## Mappa mondiale dell'export brasiliano III
+
+É necessaria questa terza visualizzazione per poter valutare gli altri partner.
 
 ```{r mapTradeC, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1415,18 +1447,23 @@ mapTradeC
 
 # importing data (pesticides use)
 pstc <- read_csv("./data/Inputs_Pesticides_Use_E_All_Data.csv") %>%
-  select(Area, Item, Value) %>% # unit is kilo tonnes
+  # minimal selection
+  select(Area, Item, Value) %>%
+  # tidy
   pivot_wider(names_from = Item, values_from = Value) %>%
+  # making ready to be displayed as a table
   select(Area, `Pesticides (total)` ) %>%
   arrange(desc(`Pesticides (total)`)) %>%
   rename(country = Area, pesticides = `Pesticides (total)`) %>%
   # filtering redundant entry for China mainland
   filter(!(grepl('mainland', country)))
 
-pstcP <- inner_join(pstc, production)
-
+# shorter names for the table
 pstc[pstc == "Russian Federation"] <- "Russia"
 pstc[pstc == "United States of America"] <- "USA"
+
+# df for production - pesticides usage correlation
+pstcP <- inner_join(pstc, production)
 
 # importing data (soil nutrient use)
 sNu <- read_csv("./data/Environment_Soil_nutrient_budget_E_All_Data.csv") %>%
@@ -1439,13 +1476,19 @@ sNu <- read_csv("./data/Environment_Soil_nutrient_budget_E_All_Data.csv") %>%
      value = Value
      )
 
+# shorter name
 sNu[sNu == "United States of America"] <- "USA"
 
+# separate df with per ha data
 sNupHa <- filter(sNu, element == "Cropland nutrient flow per unit area")
 
+# now we can work on this one
 sNu <- filter(sNu, element == "Cropland nutrient flow") %>%
+  # minimal selection
   select(- element, - unit) %>%
+  # tidy
   pivot_wider(names_from = item, values_from = value) %>%
+  # order and names
   arrange(desc(`Atmospheric Deposition`)) %>%
   rename(
     synthetic = `Synthetic Fertilizers`,
@@ -1455,53 +1498,75 @@ sNu <- filter(sNu, element == "Cropland nutrient flow") %>%
     bioFixation = `Biological Fixation`
   )
 
+# making ready for the bar plot
 sNupHa <- select(sNupHa, -element, -unit) %>%
   group_by(country) %>%
   summarize(quantity = sum(value, na.rm = TRUE)) %>%
-  arrange(desc(quantity))
+  arrange(desc(quantity)) %>%
+  # ungrouping
+  ungroup()
 
+# fixing China entry
 sNupHa[sNupHa == "China, mainland"] <- "China"
 
+# making ready to be displayed as table
 sNup <- group_by(sNu, country) %>%
-  summarize(quantity = sum(synthetic, manure, deposition, cropRemoval, bioFixation, na.rm = TRUE))
+  summarize(quantity = sum(synthetic, manure, deposition, cropRemoval, bioFixation, na.rm = TRUE)) %>%
+  # ungrouping
+  ungroup()
 
+# df for production - nutrients usage correlation
 sNuP <- inner_join(sNup, production)
 
+# building bar plot for pesticides usage (top 10 countries only)
 barPstc <- ggplot(data = pstc[1:10, ]) +
   geom_bar(stat = "identity", mapping = aes(x = country, y = pesticides, fill = country)) +
   scale_color_brewer(palette="Dark2") +
   #theme_dark() +
   labs(
     title = "Uso di pesticidi",
-    subtitle = "Primi 10 paesi per uso (in MT)",
-    caption = "Dati 2020"
+    subtitle = "Primi 10 paesi per uso",
+    caption = "Dati 2020",
+    x = "",
+    y = "Pesticide Usage (MT)",
+    fill = "Country" # not working
   )
 
+# building production - pesticides correlation scatter plot
 scatterPstcP <- ggplot(pstcP, aes(production, pesticides)) +
   geom_point(show.legend = FALSE) +
   geom_smooth(method = "lm") +
   labs(
     title = "Rapporto tra uso di pesticidi e produzione",
     subtitle = "L'uso di pesticidi è linearmente proporzionale alla produzione",
-    caption = "Dati 2020"
+    caption = "Dati 2020",
+    x = "Production (K MT)",
+    y = "Pesticides Usage (MT)"
   )
 
+# building bar plot for nutrients per ha usage (top 7)
 barSNupHa <- ggplot(data = sNupHa[1:7, ]) +
   geom_bar(stat = "identity", mapping = aes(x = country, y = quantity, fill = country)) +
   scale_color_brewer(palette="Dark2") +
   labs(
     title = "Uso di nutrienti per ettaro",
     subtitle = "Primi 7 paesi per uso di nutrienti per ettaro coltivato",
-    caption = "Dati 2020"
+    caption = "Dati 2020",
+    x = "",
+    y = "Nutrient Usage (MT per ha)",
+    fill = "Country" # not working
   )
 
+# building production - nutrients correlation scatter plot
 scatterSnuP <- ggplot(sNuP, aes(production, quantity)) +
   geom_point(show.legend = FALSE) +
   geom_smooth(method = "lm") +
   labs(
     title = "Rapporto tra uso di nutrienti e produzione",
     subtitle = "L'uso di nutrienti è linearmente proporzionale alla produzione",
-    caption = "Dati 2020"
+    caption = "Dati 2020",
+    x = "Production (K MT)",
+    y = "Nutrient Usage (MT per ha)"
   )
 
 # importing data (emission totals)
@@ -1515,8 +1580,10 @@ eTot <- read_csv("./data/Emissions_Totals_E_All_Data.csv") %>%
      item = Item,
      value = Value
      )
-  
+
+# df to be displayed as table
 eTotKable <-  pivot_wider(eTot, names_from = item, values_from = value) %>%
+  # filtering, selection and names
   filter(element == "Emissions (CO2)") %>%
   select(country, `Net Forest conversion`, `Fires in organic soils`, `Drained organic soils (CO2)`, `On-farm energy use`, `Forestland`) %>%
   rename(
@@ -1531,32 +1598,45 @@ eTotKable <-  pivot_wider(eTot, names_from = item, values_from = value) %>%
 eTot <- filter(eTot, country == "China" | country == "India" | country == "China" | country == "Brazil" | country == "United States of America")
 
 # building box plot to compare emissions from top food producing countries
-boxProdEt <- ggplot(data = eTot[1:92,]) + #26, 28, 48, 69, 92
+boxProdEt <- ggplot(data = eTot[1:92,]) + # if I keep every row it collapses, this way every state has a fair share
   geom_boxplot(mapping = aes(x = country, y = value,  fill = country)) +
   labs(
     title = "Emissioni nei maggiori produttori di cibo",
     subtitle = "Selezione delle fonti rilevanti",
-    caption = "Dati 2020"
-  ) +
-  theme_classic()
+    caption = "Dati 2020",
+    x = "",
+    y = "Emissions (MT)",
+    fill = "Country"
+  )
 
 # importing data (emissions, time)
-eTime <- read_csv("./data/FAOSTAT_data_en_8-29-2022.csv") %>%
+eTime <- read_csv("./data/Emissions_Totals_Time_E_All_Data.csv.csv") %>%
   rename(country = Area)
 
+# cleaning aggregates
 eTime <- inner_join(eTime, countryList)
 
+# making tidy
 eTime <- select(eTime, country, Element, Year, Value) %>%
   group_by(country, Year) %>%
   summarize(Value = sum(Value, na.rm = TRUE)) %>%
+  # Too many rows for plotly()
+  # So I have to choose a partition
+  # To do so I have to order the df in a way so that countries entries are grouped
+  # and I have to make sure I don't lose countries with interesting values
+  # So we do pivot_wider, order and pivot_longer back
   pivot_wider(names_from = Year, values_from = Value) %>%
-  arrange(desc(`2019`))
+  arrange(desc(`2019`)) %>%
+  # ungrouping
+  ungroup()
 
 eTime <- pivot_longer(eTime, cols = - country,
     names_to = "year",
     names_prefix = "",
     values_to = "value"
   )
+
+# building animated scatter plot
 
 # margins
 m <- list(
@@ -1567,8 +1647,9 @@ m <- list(
   pad = 4
 )
 
-scatterETime <- plot_ly(
-  data = eTime[1:2950, ],
+# actual building
+scatterETime <- plot_ly( # movements on x axis are due to NA values...
+  data = eTime[1:2950, ], # biggest number that works on my machine, 50 countries (2950 / 59)
   x = ~country,
   y = ~`value`,
   frame = ~year,
@@ -1593,8 +1674,8 @@ scatterETime <- scatterETime %>%
 
 Il primo tema legato alla sostenibilità da affrontare è relativo ai pesticidi.
 
-Quantità espresse in tonnellate.  
-La tabella e il grafico successivo propongono una presentazione generale sul loro uso.
+La tabella e il grafico successivo propongono una presentazione generale sul loro uso.  
+Quantità espresse in tonnellate.
 
 ```{r pstc, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1629,8 +1710,8 @@ scatterPstcP
 
 Il nutrimento del suolo è il secondo aspetto relativo agli input e alla sostenibilità della produzione.
 
-Quantità espresse in tonnellate.  
-La tabella e il grafico successivo propongono una presentazione generale sul loro uso.
+La tabella e il grafico successivo propongono una presentazione generale sul loro uso.  
+Quantità espresse in tonnellate.
 
 ```{r sNu, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1664,10 +1745,10 @@ scatterSnuP
 
 L'ultimo dataset che prenderemo in considerazione è relativo alle emissioni.
 
-Quantità espresse in tonnellate.  
 La tabella sottostante è relativa alle emissioni di CO2, organizzate per fonte.  
 In questa tabella è riportato anche il dato relativo ai terreni forestali.  
-FAO lo considera nel calcolo delle emissioni nette.
+FAO lo considera nel calcolo delle emissioni nette.  
+Quantità espresse in tonnellate.
 
 ```{r eTotKable, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
@@ -1681,7 +1762,7 @@ eTotKable %>%
 
 <br>
 
-Questo grafico ci permette di visualizzare la composizione delle emissioni nei principali stati produttori di cibo.
+Questo grafico mette in mostra le differenti emissioni dei maggiori produttori.
 
 ```{r boxProdEt, echo=FALSE, message=FALSE, warning=FALSE, include=TRUE, paged.print=FALSE}
 
